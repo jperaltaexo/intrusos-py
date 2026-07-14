@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Relevamiento de Intrusos — Pedidos Ya</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#141a22; --panel:#ffffff; --bg:#eef1f4; --line:#d6dce2;
+    --accion:#0b6e4f; --accion-osc:#095a41;
+    --escanear:#1d4ed8; --alerta:#b45309; --peligro:#b91c1c;
+    --muted:#5b6672; --chip:#e8edf2;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px;}
+  .mono{font-family:'SF Mono',Menlo,Consolas,monospace;}
+
+  header{background:var(--ink); color:#fff; padding:12px 16px; position:sticky; top:0; z-index:50;}
+  header h1{margin:0; font-size:1.05rem; font-weight:700; letter-spacing:.02em;}
+  header .sub{font-size:.75rem; color:#9fb0c0; margin-top:2px;}
+
+  nav{display:flex; background:#fff; border-bottom:2px solid var(--line); position:sticky; top:54px; z-index:49;}
+  nav button{flex:1; padding:12px 4px; border:none; background:none; font-size:.85rem; font-weight:600;
+    color:var(--muted); border-bottom:3px solid transparent; cursor:pointer;}
+  nav button.activo{color:var(--accion); border-bottom-color:var(--accion);}
+  nav button .badge{background:var(--accion); color:#fff; border-radius:10px; padding:1px 7px; font-size:.7rem; margin-left:4px;}
+
+  main{padding:14px; max-width:640px; margin:0 auto; padding-bottom:90px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px;}
+  .card h2{margin:0 0 10px; font-size:.95rem;}
+
+  label{display:block; font-size:.78rem; font-weight:700; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.04em; margin:12px 0 5px;}
+  input[type=text], input[type=number], input[type=date], select, textarea{
+    width:100%; padding:13px 12px; font-size:1.05rem; border:1.5px solid var(--line); border-radius:10px;
+    background:#fff; color:var(--ink);}
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--escanear); border-color:transparent;}
+  input.grande{font-size:1.4rem; font-weight:700; text-transform:uppercase;}
+
+  .fila{display:flex; gap:8px;}
+  .fila > *{flex:1;}
+
+  .btn{display:block; width:100%; padding:15px; font-size:1.05rem; font-weight:700; border:none;
+    border-radius:10px; cursor:pointer; text-align:center;}
+  .btn:active{transform:scale(.985);}
+  .btn-guardar{background:var(--accion); color:#fff;}
+  .btn-escanear{background:var(--escanear); color:#fff;}
+  .btn-sec{background:var(--chip); color:var(--ink); font-size:.9rem; padding:11px;}
+  .btn-peligro{background:var(--peligro); color:#fff;}
+  .btn-mini{width:auto; display:inline-block; padding:8px 14px; font-size:.82rem;}
+
+  .producto{border-radius:10px; padding:12px; margin-top:10px; border:1.5px solid;}
+  .producto.ok{background:#ecfdf5; border-color:#10b981;}
+  .producto.derivado{background:#eff6ff; border-color:#3b82f6;}
+  .producto.desconocido{background:#fff7ed; border-color:#f59e0b;}
+  .producto .desc{font-size:1.15rem; font-weight:800; line-height:1.25;}
+  .producto .meta{font-size:.8rem; color:var(--muted); margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{background:rgba(0,0,0,.07); border-radius:6px; padding:2px 8px; font-weight:600;}
+  .chip.tipo{background:var(--ink); color:#fff;}
+  .chip.warn{background:#fef3c7; color:#92400e;}
+  .aviso-validar{margin-top:8px; font-size:.85rem; font-weight:700; color:#065f46;}
+  .producto.desconocido .aviso-validar{color:#92400e;}
+
+  .radio-grupo{display:flex; gap:8px; margin-top:4px;}
+  .radio-grupo label{flex:1; margin:0; border:1.5px solid var(--line); border-radius:10px; padding:12px 8px;
+    text-align:center; font-size:.82rem; text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer;}
+  .radio-grupo input{display:none;}
+  .radio-grupo label.sel{border-color:var(--accion); background:#ecfdf5; color:var(--accion); font-weight:800;}
+
+  .check-linea{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:.9rem;}
+  .check-linea input{width:20px; height:20px;}
+
+  #modalScanner{position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:100; display:none;
+    flex-direction:column; padding:16px;}
+  #modalScanner.abierto{display:flex;}
+  #lector{flex:1; border-radius:12px; overflow:hidden;}
+  #modalScanner .btn{margin-top:12px;}
+  #msgScanner{color:#fff; text-align:center; padding:8px; font-size:.9rem;}
+
+  .stats{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:12px;}
+  .stat{background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px; text-align:center;}
+  .stat .num{font-size:1.5rem; font-weight:800;}
+  .stat .lbl{font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+
+  .registro{background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px; margin-bottom:8px;}
+  .registro .fila1{display:flex; justify-content:space-between; align-items:baseline;}
+  .registro .pos{font-weight:800; font-size:1.05rem;}
+  .registro .bul{font-weight:800; color:var(--accion);}
+  .registro .det{font-size:.83rem; color:var(--muted); margin-top:3px;}
+  .registro .acc{margin-top:8px; display:flex; gap:8px;}
+  .registro .tag{font-size:.68rem; font-weight:700; border-radius:5px; padding:1px 6px; text-transform:uppercase;}
+  .tag.vacia{background:#dbeafe; color:#1e40af;}
+  .tag.cruzado{background:#fee2e2; color:#991b1b;}
+  .tag.noident{background:#fef3c7; color:#92400e;}
+
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:12px 22px; border-radius:10px; font-weight:700; z-index:200; opacity:0; transition:opacity .25s;
+    pointer-events:none; max-width:90%; text-align:center;}
+  .toast.ver{opacity:1;}
+  .toast.exito{background:var(--accion);}
+  .toast.error{background:var(--peligro);}
+
+  .nota{font-size:.8rem; color:var(--muted); line-height:1.45;}
+  .oculto{display:none !important;}
+  .maestro-estado{font-size:.9rem; padding:10px; border-radius:8px; margin-bottom:10px;}
+  .maestro-estado.cargado{background:#ecfdf5; color:#065f46; font-weight:700;}
+  .maestro-estado.vacio{background:#fef3c7; color:#92400e; font-weight:700;}
+  table.mapa{width:100%; font-size:.8rem; border-collapse:collapse; margin-top:8px;}
+  table.mapa td{padding:4px 6px; border-bottom:1px solid var(--line);}
+  table.mapa td:first-child{font-weight:700; color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Relevamiento de Intrusos</h1>
+  <div class="sub" id="subHeader">Pedidos Ya — Inventario general</div>
+</header>
+
+<nav>
+  <button id="tabRelevar" class="activo" onclick="irTab('relevar')">Relevar</button>
+  <button id="tabRegistros" onclick="irTab('registros')">Registros <span class="badge" id="badgeCant">0</span></button>
+  <button id="tabMaestro" onclick="irTab('maestro')">Maestro</button>
+</nav>
+
+<main>
+
+<!-- ============ TAB RELEVAR ============ -->
+<section id="secRelevar">
+  <div class="card">
+    <label>Contador / Relevador</label>
+    <input type="text" id="inpContador" placeholder="Nombre y apellido" autocomplete="off">
+
+    <label>Posición</label>
+    <input type="text" id="inpPosicion" class="grande mono" placeholder="Ej: A-01-02-03" autocomplete="off" autocapitalize="characters">
+
+    <label>Tipo de intruso</label>
+    <div class="radio-grupo" id="grpTipo">
+      <label data-val="VACIA" class="sel" onclick="selTipo(this)">Posición vacía por sistema<input type="radio" name="tipoIntruso" value="VACIA" checked></label>
+      <label data-val="CRUZADO" onclick="selTipo(this)">Cruzado (material distinto al sistema)<input type="radio" name="tipoIntruso" value="CRUZADO"></label>
+    </div>
+
+    <label>Código (EAN / DUN)</label>
+    <div class="fila">
+      <input type="text" id="inpCodigo" class="mono" inputmode="numeric" placeholder="Escanear o tipear" autocomplete="off" style="flex:2;">
+      <button class="btn btn-escanear" style="flex:1; padding:13px 8px; font-size:.9rem;" onclick="abrirScanner()">📷 Escanear</button>
+    </div>
+
+    <div id="fichaProducto" class="oculto"></div>
+
+    <div id="bloqueNoIdent" class="oculto">
+      <label>Descripción manual (código no identificado)</label>
+      <input type="text" id="inpDescManual" placeholder="Describí el producto físico">
+    </div>
+
+    <label>Cantidad de bultos</label>
+    <input type="number" id="inpBultos" class="grande" inputmode="numeric" min="1" step="1" placeholder="0">
+
+    <div id="bloqueLote" class="oculto">
+      <label id="lblLote">Lote</label>
+      <input type="text" id="inpLote" class="mono" placeholder="Nº de lote" autocomplete="off" autocapitalize="characters">
+      <div class="check-linea">
+        <input type="checkbox" id="chkLoteIlegible" onchange="document.getElementById('inpLote').disabled=this.checked;">
+        <span>Lote ilegible / sin dato</span>
+      </div>
+    </div>
+
+    <div id="bloqueVto" class="oculto">
+      <label id="lblVto">Vencimiento</label>
+      <input type="date" id="inpVto">
+      <div class="check-linea">
+        <input type="checkbox" id="chkVtoIlegible" onchange="document.getElementById('inpVto').disabled=this.checked;">
+        <span>Vencimiento ilegible / sin dato</span>
+      </div>
+    </div>
+
+    <label>Observaciones (opcional)</label>
+    <textarea id="inpObs" rows="2" placeholder="Ej: pallet completo, mercadería dañada…"></textarea>
+
+    <div style="margin-top:14px;">
+      <button class="btn btn-guardar" id="btnGuardar" onclick="guardar()">✔ Guardar intruso</button>
+    </div>
+  </div>
+  <p class="nota">El intruso <b>no se mueve de la posición</b>: se etiqueta, se releva y se continúa. La conversión bultos → unidades se hace en la exportación contra el maestro.</p>
+</section>
+
+<!-- ============ TAB REGISTROS ============ -->
+<section id="secRegistros" class="oculto">
+  <div class="stats">
+    <div class="stat"><div class="num" id="stTotal">0</div><div class="lbl">Intrusos</div></div>
+    <div class="stat"><div class="num" id="stBultos">0</div><div class="lbl">Bultos</div></div>
+    <div class="stat"><div class="num" id="stPos">0</div><div class="lbl">Posiciones</div></div>
+    <div class="stat"><div class="num" id="stNoIdent">0</div><div class="lbl">Sin identificar</div></div>
+  </div>
+  <div class="fila" style="margin-bottom:12px;">
+    <button class="btn btn-sec" onclick="exportarXLSX()">⬇ Exportar Excel</button>
+    <button class="btn btn-sec" onclick="exportarCSV()">⬇ CSV</button>
+  </div>
+  <div id="listaRegistros"></div>
+  <div style="margin-top:16px;">
+    <button class="btn btn-peligro" onclick="borrarTodo()">🗑 Borrar todos los registros</button>
+  </div>
+</section>
+
+<!-- ============ TAB MAESTRO ============ -->
+<section id="secMaestro" class="oculto">
+  <div class="card">
+    <h2>Maestro de SKU</h2>
+    <div id="estadoMaestro" class="maestro-estado vacio">Sin maestro cargado — los códigos escaneados quedarán como "no identificados".</div>
+    <input type="file" id="inpMaestro" accept=".xlsx,.xls,.csv" style="font-size:.9rem;">
+    <div id="mapaMaestro"></div>
+    <p class="nota" style="margin-top:10px;">
+      Se detectan automáticamente: <b>SKU</b> · <b>Descripción</b> · <b>Unidades x Caja</b> (999999 se ignora como "sin definir") ·
+      <b>Validación de lote</b> (define si el SKU pide lote y/o vencimiento) · y <b>todas las columnas de códigos</b>
+      (EAN PEYA, OTROS CÓDIGOS, EAN, DUN, blíster…).<br>
+      Cada código se clasifica por su estructura GS1 (EAN-13, DUN-14, UPC-A, EAN-8), aunque haya varios en la misma celda
+      o estén en columnas cruzadas. Para los DUN se deriva además el EAN-13 equivalente.
+    </p>
+    <button class="btn btn-sec" style="margin-top:8px;" onclick="descargarPlantilla()">⬇ Descargar plantilla de maestro</button>
+  </div>
+  <div class="card">
+    <h2>Configuración</h2>
+    <label>Etiqueta del ejercicio</label>
+    <input type="text" id="inpEjercicio" placeholder="Ej: Pedidos Ya — Inventario 17/08/2026" onchange="guardarConfig()">
+  </div>
+</section>
+
+</main>
+
+<!-- Modal scanner -->
+<div id="modalScanner">
+  <div id="msgScanner">Apuntá al código de barras (EAN-13 / DUN-14 / ITF)</div>
+  <div id="lector"></div>
+  <button class="btn btn-peligro" onclick="cerrarScanner()">Cancelar</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/*__LOGIC_INI__*/
+/* ====== Lógica pura (testeable): normalización, GS1, detección de columnas, parseo, índice ====== */
+function normCod(c){ return String(c||'').replace(/\D/g,''); }
+function digitoGTIN(base){ let s=0; for(let i=0;i<base.length;i++){ s += (+base[base.length-1-i]) * (i%2===0?3:1); } return String((10-(s%10))%10); }
+function dunAEan(dun14){ if(dun14.length!==14) return null; const b=dun14.substring(1,13); return b+digitoGTIN(b); }
+function tokensCodigo(celda){ return String(celda||'').split(/[\s,;\/|]+/).map(normCod).filter(Boolean); }
+function clasificarCodigo(c){
+  if(c.length===13) return {tipo:'EAN-13', ok:digitoGTIN(c.substring(0,12))===c[12]};
+  if(c.length===14) return {tipo:'DUN-14 caja', ok:digitoGTIN(c.substring(0,13))===c[13]};
+  if(c.length===12) return {tipo:'UPC-A', ok:digitoGTIN(c.substring(0,11))===c[11]};
+  if(c.length===8)  return {tipo:'EAN-8', ok:digitoGTIN(c.substring(0,7))===c[7]};
+  return {tipo:c.length+' díg (no estándar)', ok:false};
+}
+const SIN_PRIORITARIOS = { // se buscan primero (más específicos)
+  req_vto: h => /valida/.test(h) || /req\w*\s*(de\s*)?(vto|venc|lote)/.test(h)
+};
+const SINONIMOS = {
+  sku:         h => /(^|\b)(sku|material|item|c[oó]digo\s*interno|art[ií]culo)\b/.test(h),
+  descripcion: h => /descrip|denomin|nombre/.test(h),
+  unid_x_bulto:h => /unid\w*\s*(x|por|×)\s*(bulto|caja)|\bupb\b|factor/.test(h),
+  req_vto:     h => /vto|venc|caduc|lote/.test(h),
+  codigo:      h => /\bean\b|\bdun\b|\bupc\b|\bgtin\b|\bitf\b|barra|bl[ií]ster|blister|otros\s*c[oó]d/.test(h)
+};
+function detectarColumnas(headers){
+  const map={codigos:[]}; const usadas=new Set();
+  const hn = headers.map(h=>String(h||'').toLowerCase().trim());
+  Object.keys(SIN_PRIORITARIOS).forEach(campo=>{
+    hn.forEach((h,i)=>{ if(map[campo]===undefined && !usadas.has(i) && h && SIN_PRIORITARIOS[campo](h)){ map[campo]=i; usadas.add(i); } });
+  });
+  ['sku','descripcion','unid_x_bulto','req_vto'].forEach(campo=>{
+    hn.forEach((h,i)=>{ if(map[campo]===undefined && !usadas.has(i) && h && SINONIMOS[campo](h)){ map[campo]=i; usadas.add(i); } });
+  });
+  hn.forEach((h,i)=>{ if(!usadas.has(i) && h && SINONIMOS.codigo(h)){ map.codigos.push(i); usadas.add(i); } });
+  return map;
+}
+function parseValidacion(v){ // devuelve {vto:'SI'|'NO'|'', lote:'SI'|'NO'|''}
+  const t=String(v||'').toUpperCase().trim();
+  if(!t) return {vto:'', lote:''};
+  const vto = /VTO|VENC|CADUC|FECHA/.test(t) ? 'SI' : (/^(SI|SÍ|S|YES|X|1|TRUE)$/.test(t) ? 'SI' : 'NO');
+  const lote = /SIN\s*LOTE/.test(t) ? 'NO' : (/LOTE|^LOT$|\bLOT\b/.test(t) ? 'SI' : 'NO');
+  return {vto, lote};
+}
+function parseUnidXBulto(v){
+  const n=parseFloat(String(v||'').replace(',','.'));
+  if(!n || n<=0 || n>=9999) return null; // 999999 = placeholder "sin definir" en la maestra
+  return n;
+}
+function parsearFilas(filas, map){
+  const skus=[];
+  for(let i=1;i<filas.length;i++){
+    const fila=filas[i]; if(!fila || fila.every(c=>String(c==null?'':c).trim()==='')) continue;
+    const g=idx=> idx!==undefined ? String(fila[idx]==null?'':fila[idx]).trim() : '';
+    const val=parseValidacion(g(map.req_vto));
+    const cods=[];
+    map.codigos.forEach(ci=>{ tokensCodigo(fila[ci]).forEach(c=>{ if(!cods.includes(c)) cods.push(c); }); });
+    skus.push({
+      sku:g(map.sku), descripcion:g(map.descripcion),
+      codigos:cods, unid_x_bulto:parseUnidXBulto(g(map.unid_x_bulto)),
+      req_vto:val.vto, req_lote:val.lote
+    });
+  }
+  return skus;
+}
+function construirIndice(skus){
+  const idx={};
+  const poner=(cod,i,tipo,prio)=>{ if(!cod) return; if(!(cod in idx) || idx[cod].prio>prio) idx[cod]={i,tipo,prio}; };
+  skus.forEach((s,i)=>{
+    s.codigos.forEach(c=>{
+      const cl=clasificarCodigo(c);
+      poner(c, i, cl.tipo + (cl.ok?'':' ⚠ verif. inválido'), 1);
+      if(c.length===14){ poner(dunAEan(c), i, 'EAN-13 derivado de DUN', 2); }
+      if(c.length===13){ poner('0'+c, i, cl.tipo, 3); }
+      if(c.length===12){ poner('0'+c, i, 'UPC-A como EAN-13', 3); }
+    });
+  });
+  return idx;
+}
+function buscarEnIndice(codRaw, skus, indice){
+  const cod=normCod(codRaw);
+  if(!cod) return null;
+  let hit = indice[cod];
+  if(!hit && cod.length===14){ const der=dunAEan(cod); if(der && indice[der]) hit={...indice[der], tipo:'DUN-14 → identificado por EAN derivado'}; }
+  if(!hit && cod.length===13 && indice['0'+cod]) hit=indice['0'+cod];
+  if(!hit && cod.length===14 && cod[0]==='0' && indice[cod.substring(1)]) hit=indice[cod.substring(1)];
+  if(hit) return {encontrado:true, sku:skus[hit.i], tipoCodigo:hit.tipo, codigo:cod};
+  return {encontrado:false, codigo:cod};
+}
+/*__LOGIC_FIN__*/
+
+/* ================== ESTADO ================== */
+const K_REG='intrusos_py_registros', K_MAE='intrusos_py_maestro_v2', K_CFG='intrusos_py_config';
+let registros = JSON.parse(localStorage.getItem(K_REG)||'[]');
+let maestro   = null;   // {skus, headers, fecha, archivo} — el índice se reconstruye al iniciar
+let indice    = {};
+let productoActual = null;
+let scanner = null;
+try{ maestro=JSON.parse(localStorage.getItem(K_MAE)||'null'); if(maestro) indice=construirIndice(maestro.skus); }catch(e){ maestro=null; }
+let config = JSON.parse(localStorage.getItem(K_CFG)||'{}');
+
+const $ = id => document.getElementById(id);
+function toast(msg, cls){ const t=$('toast'); t.textContent=msg; t.className='toast ver '+(cls||''); setTimeout(()=>t.className='toast',2200); }
+function hoyISO(){ return new Date().toLocaleString('es-AR',{hour12:false}); }
+
+/* ================== MAESTRO ================== */
+$('inpMaestro').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload = ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const filas=XLSX.utils.sheet_to_json(ws,{header:1, raw:false, defval:''});
+      if(filas.length<2){ toast('El archivo no tiene datos','error'); return; }
+      const map=detectarColumnas(filas[0]);
+      if(map.sku===undefined && !map.codigos.length){
+        toast('No se detectaron columnas de código (SKU/EAN/DUN)','error'); return;
+      }
+      const skus=parsearFilas(filas, map);
+      maestro={skus, headers:map, fecha:hoyISO(), archivo:f.name};
+      indice=construirIndice(skus);
+      try{ localStorage.setItem(K_MAE, JSON.stringify(maestro)); }
+      catch(err){ toast('Maestro cargado en memoria (muy grande para persistir: recargalo si cerrás la app)','error'); }
+      pintarMaestro();
+      toast('Maestro cargado: '+skus.length+' SKU','exito');
+    }catch(err){ console.error(err); toast('Error al leer el archivo','error'); }
+  };
+  r.readAsArrayBuffer(f);
+});
+function pintarMaestro(){
+  const est=$('estadoMaestro');
+  if(maestro && maestro.skus.length){
+    const nCods=Object.keys(indice).length;
+    const conVto=maestro.skus.filter(s=>s.req_vto==='SI').length;
+    const conLote=maestro.skus.filter(s=>s.req_lote==='SI').length;
+    const conFactor=maestro.skus.filter(s=>s.unid_x_bulto).length;
+    est.className='maestro-estado cargado';
+    est.textContent='Maestro cargado: '+maestro.skus.length+' SKU · '+nCods+' códigos indexados ('+(maestro.archivo||'')+')';
+    const m=maestro.headers;
+    const filaMapa=(nombre,val)=>'<tr><td>'+nombre+'</td><td>'+val+'</td></tr>';
+    $('mapaMaestro').innerHTML='<table class="mapa">'+
+      filaMapa('SKU', m.sku!==undefined?'✓ col. '+(m.sku+1):'— no detectada')+
+      filaMapa('Descripción', m.descripcion!==undefined?'✓ col. '+(m.descripcion+1):'— no detectada')+
+      filaMapa('Unid x bulto', m.unid_x_bulto!==undefined?'✓ col. '+(m.unid_x_bulto+1)+' · con factor válido: '+conFactor:'— no detectada')+
+      filaMapa('Lote / Vto', m.req_vto!==undefined?'✓ col. '+(m.req_vto+1)+' · piden Vto: '+conVto+' · piden Lote: '+conLote:'— no detectada')+
+      filaMapa('Columnas de códigos', m.codigos.length?('✓ col. '+m.codigos.map(c=>c+1).join(' y ')+' (se clasifican por estructura GS1)'):'— ninguna')+
+      '</table>';
+  } else {
+    est.className='maestro-estado vacio';
+    est.textContent='Sin maestro cargado — los códigos escaneados quedarán como "no identificados".';
+    $('mapaMaestro').innerHTML='';
+  }
+}
+function descargarPlantilla(){
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['SKU','Descripcion','UNIDADES x CAJA','VALIDACIÓN DE LOTE','EAN PEYA','OTROS CÓDIGOS'],
+    ['1001','Coca Cola 2.25L x8','8','Lote - Fecha Vto','7790895000997','17790895000994'],
+    ['1002','Papel Higienico Elite x4','24','Lote','7791234567890','']
+  ]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Maestro');
+  XLSX.writeFile(wb,'Plantilla_Maestro_Intrusos.xlsx');
+}
+
+/* ================== LOOKUP + FICHA ================== */
+function procesarCodigo(codRaw){
+  const res = maestro ? buscarEnIndice(codRaw, maestro.skus, indice) : {encontrado:false, codigo:normCod(codRaw)};
+  if(!normCod(codRaw)){ productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto'; $('bloqueVto').className='oculto'; $('bloqueLote').className='oculto'; return; }
+  productoActual=res;
+  const ficha=$('fichaProducto'), bNoId=$('bloqueNoIdent'), bVto=$('bloqueVto'), bLote=$('bloqueLote');
+
+  if(res.encontrado){
+    const s=res.sku;
+    const esDerivado=/derivado/i.test(res.tipoCodigo);
+    const verifMal=/verif/i.test(res.tipoCodigo);
+    ficha.className='producto '+(esDerivado?'derivado':'ok');
+    ficha.innerHTML =
+      '<div class="desc">'+ (s.descripcion||'(sin descripción)') +'</div>'+
+      '<div class="meta">'+
+        '<span class="chip tipo">'+res.tipoCodigo.replace(' ⚠ verif. inválido','')+'</span>'+
+        (verifMal?'<span class="chip warn">⚠ dígito verificador inválido en la maestra</span>':'')+
+        (s.sku?'<span class="chip">SKU '+s.sku+'</span>':'')+
+        (s.unid_x_bulto?'<span class="chip">'+s.unid_x_bulto+' un/bulto</span>':'<span class="chip warn">un/bulto sin definir</span>')+
+        (s.req_lote==='SI'?'<span class="chip">Lleva Lote</span>':'')+
+        (s.req_vto==='SI'?'<span class="chip">Lleva Vto</span>':(s.req_vto==='NO'?'<span class="chip">Sin Vto</span>':''))+
+      '</div>'+
+      '<div class="aviso-validar">👁 Validá que la descripción coincida con lo físico antes de guardar.</div>';
+    bNoId.className='oculto';
+    if(s.req_vto==='SI'){ bVto.className=''; $('lblVto').textContent='Vencimiento (obligatorio)'; }
+    else if(s.req_vto==='NO'){ bVto.className='oculto'; $('inpVto').value=''; $('chkVtoIlegible').checked=false; }
+    else { bVto.className=''; $('lblVto').textContent='Vencimiento (si corresponde)'; }
+    if(s.req_lote==='SI'){ bLote.className=''; $('lblLote').textContent='Lote (obligatorio)'; }
+    else if(s.req_lote==='NO'){ bLote.className='oculto'; $('inpLote').value=''; $('chkLoteIlegible').checked=false; }
+    else { bLote.className=''; $('lblLote').textContent='Lote (si corresponde)'; }
+  } else {
+    const cl=clasificarCodigo(res.codigo);
+    ficha.className='producto desconocido';
+    ficha.innerHTML =
+      '<div class="desc">Código no identificado</div>'+
+      '<div class="meta"><span class="chip mono">'+res.codigo+'</span><span class="chip tipo">'+cl.tipo+'</span>'+(cl.ok?'':'<span class="chip warn">⚠ verificador inválido: revisá el escaneo</span>')+'</div>'+
+      '<div class="aviso-validar">⚠ No está en el maestro. Cargá la descripción manual; queda marcado para revisión.</div>';
+    bNoId.className='';
+    bVto.className=''; $('lblVto').textContent='Vencimiento (si corresponde)';
+    bLote.className=''; $('lblLote').textContent='Lote (si corresponde)';
+  }
+}
+$('inpCodigo').addEventListener('change', e=>procesarCodigo(e.target.value));
+$('inpCodigo').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); procesarCodigo(e.target.value); }});
+
+/* ================== SCANNER ================== */
+function abrirScanner(){
+  $('modalScanner').className='abierto';
+  const conf={ fps:10, qrbox:{width:280,height:140},
+    formatsToSupport:[ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A ] };
+  scanner=new Html5Qrcode('lector');
+  scanner.start({facingMode:'environment'}, conf,
+    txt=>{ if(navigator.vibrate) navigator.vibrate(120);
+      $('inpCodigo').value=txt; cerrarScanner(); procesarCodigo(txt); $('inpBultos').focus(); },
+    ()=>{} )
+  .catch(err=>{ $('msgScanner').textContent='No se pudo abrir la cámara: '+err+' — tipeá el código manualmente.'; });
+}
+function cerrarScanner(){
+  if(scanner){ scanner.stop().then(()=>{scanner.clear(); scanner=null;}).catch(()=>{scanner=null;}); }
+  $('modalScanner').className='';
+  $('msgScanner').textContent='Apuntá al código de barras (EAN-13 / DUN-14 / ITF)';
+}
+
+/* ================== GUARDAR ================== */
+function selTipo(lbl){
+  document.querySelectorAll('#grpTipo label').forEach(l=>l.classList.remove('sel'));
+  lbl.classList.add('sel'); lbl.querySelector('input').checked=true;
+}
+function guardar(){
+  const contador=$('inpContador').value.trim();
+  const posicion=$('inpPosicion').value.trim().toUpperCase();
+  const bultos=parseInt($('inpBultos').value,10);
+  const tipoIntruso=document.querySelector('input[name=tipoIntruso]:checked').value;
+  const obs=$('inpObs').value.trim();
+
+  if(!contador){ toast('Falta el nombre del contador','error'); $('inpContador').focus(); return; }
+  if(!posicion){ toast('Falta la posición','error'); $('inpPosicion').focus(); return; }
+  if(!productoActual){ toast('Falta el código del producto','error'); $('inpCodigo').focus(); return; }
+  if(!bultos || bultos<1){ toast('Cargá la cantidad de bultos','error'); $('inpBultos').focus(); return; }
+
+  let descManual='';
+  if(!productoActual.encontrado){
+    descManual=$('inpDescManual').value.trim();
+    if(!descManual){ toast('Cargá la descripción manual del producto','error'); $('inpDescManual').focus(); return; }
+  }
+  const s = productoActual.encontrado ? productoActual.sku : null;
+
+  // lote
+  let lote='', loteIlegible=false;
+  const reqLote = s ? s.req_lote : '';
+  if(reqLote!=='NO'){
+    loteIlegible=$('chkLoteIlegible').checked;
+    lote=loteIlegible?'':$('inpLote').value.trim().toUpperCase();
+    if(reqLote==='SI' && !lote && !loteIlegible){
+      toast('Este producto requiere lote (o marcá "ilegible")','error'); $('inpLote').focus(); return;
+    }
+  }
+  // vencimiento
+  let vto='', vtoIlegible=false;
+  const reqVto = s ? s.req_vto : '';
+  if(reqVto!=='NO'){
+    vtoIlegible=$('chkVtoIlegible').checked;
+    vto=vtoIlegible?'':$('inpVto').value;
+    if(reqVto==='SI' && !vto && !vtoIlegible){
+      toast('Este producto requiere vencimiento (o marcá "ilegible")','error'); $('inpVto').focus(); return;
+    }
+  }
+  // duplicado
+  const codN=productoActual.codigo;
+  const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN);
+  if(dup && !confirm('Ya existe un registro de este código en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
+
+  const unidXB = s && s.unid_x_bulto ? s.unid_x_bulto : null;
+  registros.push({
+    id:Date.now(), ts:hoyISO(), contador, posicion, tipoIntruso,
+    codigo:codN, tipoCodigo: productoActual.encontrado?productoActual.tipoCodigo:'No identificado',
+    sku: s?s.sku:'', descripcion: s?s.descripcion:descManual,
+    bultos, unidXBulto:unidXB, unidades: unidXB?bultos*unidXB:'',
+    lote, loteIlegible, vencimiento:vto, vtoIlegible, obs,
+    identificado:productoActual.encontrado
+  });
+  persistir();
+  toast('Intruso guardado en '+posicion+' ✔','exito');
+  $('inpCodigo').value=''; $('inpBultos').value='';
+  $('inpVto').value=''; $('chkVtoIlegible').checked=false; $('inpVto').disabled=false;
+  $('inpLote').value=''; $('chkLoteIlegible').checked=false; $('inpLote').disabled=false;
+  $('inpObs').value=''; $('inpDescManual').value='';
+  productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto';
+  $('bloqueVto').className='oculto'; $('bloqueLote').className='oculto';
+  $('inpCodigo').focus();
+}
+function persistir(){
+  localStorage.setItem(K_REG, JSON.stringify(registros));
+  $('badgeCant').textContent=registros.length;
+  pintarRegistros();
+}
+
+/* ================== REGISTROS ================== */
+function pintarRegistros(){
+  $('stTotal').textContent=registros.length;
+  $('stBultos').textContent=registros.reduce((a,r)=>a+r.bultos,0);
+  $('stPos').textContent=new Set(registros.map(r=>r.posicion)).size;
+  $('stNoIdent').textContent=registros.filter(r=>!r.identificado).length;
+  const cont=$('listaRegistros');
+  if(!registros.length){ cont.innerHTML='<p class="nota" style="text-align:center;">Sin registros todavía. Los intrusos que guardes van a aparecer acá.</p>'; return; }
+  cont.innerHTML=[...registros].reverse().map(r=>
+    '<div class="registro">'+
+      '<div class="fila1"><span class="pos mono">'+r.posicion+'</span><span class="bul">'+r.bultos+' bulto'+(r.bultos>1?'s':'')+'</span></div>'+
+      '<div class="det"><b>'+ (r.descripcion||'(s/desc)') +'</b></div>'+
+      '<div class="det mono">'+r.codigo+' · '+r.tipoCodigo+(r.sku?' · SKU '+r.sku:'')+'</div>'+
+      '<div class="det">'+
+        '<span class="tag '+(r.tipoIntruso==='VACIA'?'vacia':'cruzado')+'">'+(r.tipoIntruso==='VACIA'?'Pos. vacía':'Cruzado')+'</span> '+
+        (!r.identificado?'<span class="tag noident">Sin identificar</span> ':'')+
+        (r.lote?('Lote: '+r.lote+' · '):(r.loteIlegible?'Lote ilegible · ':''))+
+        (r.vencimiento?('Vto: '+r.vencimiento+' · '):(r.vtoIlegible?'Vto ilegible · ':''))+
+        r.contador+' · '+r.ts + (r.obs?' · '+r.obs:'')+
+      '</div>'+
+      '<div class="acc"><button class="btn btn-sec btn-mini" onclick="borrarUno('+r.id+')">Eliminar</button></div>'+
+    '</div>').join('');
+}
+function borrarUno(id){
+  const r=registros.find(x=>x.id===id);
+  if(confirm('¿Eliminar el registro de '+r.posicion+' ('+(r.descripcion||r.codigo)+')?')){
+    registros=registros.filter(x=>x.id!==id); persistir();
+  }
+}
+function borrarTodo(){
+  if(!registros.length) return;
+  if(confirm('¿Borrar TODOS los registros ('+registros.length+')? Esta acción no se puede deshacer. Exportá antes si hace falta.')){
+    if(confirm('Confirmá de nuevo: se van a borrar '+registros.length+' registros.')){
+      registros=[]; persistir(); toast('Registros eliminados');
+    }
+  }
+}
+
+/* ================== EXPORTAR ================== */
+const COLS=['Fecha/Hora','Contador','Posición','Tipo intruso','Código','Tipo de código','SKU','Descripción','Bultos','Unid x Bulto','Unidades','Lote','Lote ilegible','Vencimiento','Vto ilegible','Identificado','Observaciones'];
+function filasExport(){
+  return registros.map(r=>[ r.ts, r.contador, r.posicion,
+    r.tipoIntruso==='VACIA'?'Posición vacía por sistema':'Cruzado',
+    r.codigo, r.tipoCodigo, r.sku, r.descripcion, r.bultos,
+    r.unidXBulto||'', r.unidades!==''?r.unidades:'',
+    r.lote||'', r.loteIlegible?'SI':'', r.vencimiento, r.vtoIlegible?'SI':'',
+    r.identificado?'SI':'NO', r.obs ]);
+}
+function nombreArchivo(ext){
+  const d=new Date(); const p=n=>String(n).padStart(2,'0');
+  return 'Intrusos_PedidosYa_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+'.'+ext;
+}
+function exportarXLSX(){
+  if(!registros.length){ toast('No hay registros para exportar','error'); return; }
+  const ws=XLSX.utils.aoa_to_sheet([COLS, ...filasExport()]);
+  ws['!cols']=COLS.map((c,i)=>({wch:[18,16,12,22,16,22,10,34,8,11,10,14,10,12,10,11,26][i]||14}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Intrusos');
+  XLSX.writeFile(wb, nombreArchivo('xlsx'));
+}
+function exportarCSV(){
+  if(!registros.length){ toast('No hay registros para exportar','error'); return; }
+  const esc=v=>{ v=String(v??''); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const csv='\uFEFF'+[COLS, ...filasExport()].map(f=>f.map(esc).join(';')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=nombreArchivo('csv'); a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ================== TABS / CONFIG ================== */
+function irTab(t){
+  ['relevar','registros','maestro'].forEach(x=>{
+    $('sec'+x[0].toUpperCase()+x.slice(1)).className = (x===t)?'':'oculto';
+    $('tab'+x[0].toUpperCase()+x.slice(1)).className = (x===t)?'activo':'';
+  });
+  if(t==='registros') pintarRegistros();
+}
+function guardarConfig(){
+  config.ejercicio=$('inpEjercicio').value.trim();
+  config.contador=$('inpContador').value.trim();
+  localStorage.setItem(K_CFG, JSON.stringify(config));
+  $('subHeader').textContent=config.ejercicio||'Pedidos Ya — Inventario general';
+}
+$('inpContador').addEventListener('change', guardarConfig);
+
+/* ================== INIT ================== */
+(function init(){
+  $('badgeCant').textContent=registros.length;
+  if(config.ejercicio){ $('inpEjercicio').value=config.ejercicio; $('subHeader').textContent=config.ejercicio; }
+  if(config.contador){ $('inpContador').value=config.contador; }
+  pintarMaestro(); pintarRegistros();
+})();
+</script>
+</body>
+</html>

@@ -136,7 +136,10 @@
     <input type="text" id="inpContador" placeholder="Nombre y apellido" autocomplete="off">
 
     <label>Posición</label>
-    <input type="text" id="inpPosicion" class="grande mono" placeholder="Ej: A-01-02-03" autocomplete="off" autocapitalize="characters">
+    <div class="fila">
+      <input type="text" id="inpPosicion" class="grande mono" inputmode="numeric" placeholder="Ej: 090600200" autocomplete="off" autocapitalize="characters" style="flex:4;">
+      <button type="button" class="btn btn-sec" id="btnTecladoPos" style="flex:1; padding:8px 4px; font-size:.78rem; line-height:1.2;" onclick="toggleTecladoPos()" title="Cambiar tipo de teclado">123<br><span style="font-size:.62rem; color:var(--muted);">teclado</span></button>
+    </div>
 
     <label>Tipo de intruso</label>
     <div class="radio-grupo" id="grpTipo">
@@ -159,15 +162,6 @@
 
     <label>Cantidad de bultos</label>
     <input type="number" id="inpBultos" class="grande" inputmode="numeric" min="1" step="1" placeholder="0">
-
-    <div id="bloqueLote" class="oculto">
-      <label id="lblLote">Lote</label>
-      <input type="text" id="inpLote" class="mono" placeholder="Nº de lote" autocomplete="off" autocapitalize="characters">
-      <div class="check-linea">
-        <input type="checkbox" id="chkLoteIlegible" onchange="document.getElementById('inpLote').disabled=this.checked;">
-        <span>Lote ilegible / sin dato</span>
-      </div>
-    </div>
 
     <div id="bloqueVto" class="oculto">
       <label id="lblVto">Vencimiento</label>
@@ -397,7 +391,7 @@ function pintarMaestro(){
       filaMapa('SKU', m.sku!==undefined?'✓ col. '+(m.sku+1):'— no detectada')+
       filaMapa('Descripción', m.descripcion!==undefined?'✓ col. '+(m.descripcion+1):'— no detectada')+
       filaMapa('Unid x bulto', m.unid_x_bulto!==undefined?'✓ col. '+(m.unid_x_bulto+1)+' · con factor válido: '+conFactor:'— no detectada')+
-      filaMapa('Lote / Vto', m.req_vto!==undefined?'✓ col. '+(m.req_vto+1)+' · piden Vto: '+conVto+' · piden Lote: '+conLote:'— no detectada')+
+      filaMapa('Lote / Vto', m.req_vto!==undefined?'✓ col. '+(m.req_vto+1)+' · piden Vto: '+conVto:'— no detectada')+
       filaMapa('Columnas de códigos', m.codigos.length?('✓ col. '+m.codigos.map(c=>c+1).join(' y ')+' (se clasifican por estructura GS1)'):'— ninguna')+
       '</table>';
   } else {
@@ -419,9 +413,9 @@ function descargarPlantilla(){
 /* ================== LOOKUP + FICHA ================== */
 function procesarCodigo(codRaw){
   const res = maestro ? buscarEnIndice(codRaw, maestro.skus, indice) : {encontrado:false, codigo:normCod(codRaw)};
-  if(!normCod(codRaw)){ productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto'; $('bloqueVto').className='oculto'; $('bloqueLote').className='oculto'; return; }
+  if(!normCod(codRaw)){ productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto'; $('bloqueVto').className='oculto'; return; }
   productoActual=res;
-  const ficha=$('fichaProducto'), bNoId=$('bloqueNoIdent'), bVto=$('bloqueVto'), bLote=$('bloqueLote');
+  const ficha=$('fichaProducto'), bNoId=$('bloqueNoIdent'), bVto=$('bloqueVto');
 
   if(res.encontrado){
     const s=res.sku;
@@ -435,7 +429,6 @@ function procesarCodigo(codRaw){
         (verifMal?'<span class="chip warn">⚠ dígito verificador inválido en la maestra</span>':'')+
         (s.sku?'<span class="chip">SKU '+s.sku+'</span>':'')+
         (s.unid_x_bulto?'<span class="chip">'+s.unid_x_bulto+' un/bulto</span>':'<span class="chip warn">un/bulto sin definir</span>')+
-        (s.req_lote==='SI'?'<span class="chip">Lleva Lote</span>':'')+
         (s.req_vto==='SI'?'<span class="chip">Lleva Vto</span>':(s.req_vto==='NO'?'<span class="chip">Sin Vto</span>':''))+
       '</div>'+
       '<div class="aviso-validar">👁 Validá que la descripción coincida con lo físico antes de guardar.</div>';
@@ -443,9 +436,6 @@ function procesarCodigo(codRaw){
     if(s.req_vto==='SI'){ bVto.className=''; $('lblVto').textContent='Vencimiento (obligatorio)'; }
     else if(s.req_vto==='NO'){ bVto.className='oculto'; $('inpVto').value=''; $('chkVtoIlegible').checked=false; }
     else { bVto.className=''; $('lblVto').textContent='Vencimiento (si corresponde)'; }
-    if(s.req_lote==='SI'){ bLote.className=''; $('lblLote').textContent='Lote (obligatorio)'; }
-    else if(s.req_lote==='NO'){ bLote.className='oculto'; $('inpLote').value=''; $('chkLoteIlegible').checked=false; }
-    else { bLote.className=''; $('lblLote').textContent='Lote (si corresponde)'; }
   } else {
     const cl=clasificarCodigo(res.codigo);
     const sinMaestro = !maestro || !maestro.skus.length;
@@ -456,7 +446,6 @@ function procesarCodigo(codRaw){
       '<div class="aviso-validar">'+(sinMaestro?'⚠ Cargá el maestro en la pestaña Maestro para identificar productos.':'⚠ No está en el maestro. Cargá la descripción manual; queda marcado para revisión.')+'</div>';
     bNoId.className='';
     bVto.className=''; $('lblVto').textContent='Vencimiento (si corresponde)';
-    bLote.className=''; $('lblLote').textContent='Lote (si corresponde)';
   }
 }
 $('inpCodigo').addEventListener('change', e=>procesarCodigo(e.target.value));
@@ -505,16 +494,6 @@ function guardar(){
   }
   const s = productoActual.encontrado ? productoActual.sku : null;
 
-  // lote
-  let lote='', loteIlegible=false;
-  const reqLote = s ? s.req_lote : '';
-  if(reqLote!=='NO'){
-    loteIlegible=$('chkLoteIlegible').checked;
-    lote=loteIlegible?'':$('inpLote').value.trim().toUpperCase();
-    if(reqLote==='SI' && !lote && !loteIlegible){
-      toast('Este producto requiere lote (o marcá "ilegible")','error'); $('inpLote').focus(); return;
-    }
-  }
   // vencimiento
   let vto='', vtoIlegible=false;
   const reqVto = s ? s.req_vto : '';
@@ -536,17 +515,16 @@ function guardar(){
     codigo:codN, tipoCodigo: productoActual.encontrado?productoActual.tipoCodigo:'No identificado',
     sku: s?s.sku:'', descripcion: s?s.descripcion:descManual,
     bultos, unidXBulto:unidXB, unidades: unidXB?bultos*unidXB:'',
-    lote, loteIlegible, vencimiento:vto, vtoIlegible, obs,
+    vencimiento:vto, vtoIlegible, obs,
     identificado:productoActual.encontrado
   });
   persistir();
   toast('Intruso guardado en '+posicion+' ✔','exito');
   $('inpCodigo').value=''; $('inpBultos').value='';
   $('inpVto').value=''; $('chkVtoIlegible').checked=false; $('inpVto').disabled=false;
-  $('inpLote').value=''; $('chkLoteIlegible').checked=false; $('inpLote').disabled=false;
   $('inpObs').value=''; $('inpDescManual').value='';
   productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto';
-  $('bloqueVto').className='oculto'; $('bloqueLote').className='oculto';
+  $('bloqueVto').className='oculto';
   $('inpCodigo').focus();
 }
 function persistir(){
@@ -571,7 +549,6 @@ function pintarRegistros(){
       '<div class="det">'+
         '<span class="tag '+(r.tipoIntruso==='VACIA'?'vacia':'cruzado')+'">'+(r.tipoIntruso==='VACIA'?'Pos. vacía':'Cruzado')+'</span> '+
         (!r.identificado?'<span class="tag noident">Sin identificar</span> ':'')+
-        (r.lote?('Lote: '+r.lote+' · '):(r.loteIlegible?'Lote ilegible · ':''))+
         (r.vencimiento?('Vto: '+r.vencimiento+' · '):(r.vtoIlegible?'Vto ilegible · ':''))+
         r.contador+' · '+r.ts + (r.obs?' · '+r.obs:'')+
       '</div>'+
@@ -594,13 +571,13 @@ function borrarTodo(){
 }
 
 /* ================== EXPORTAR ================== */
-const COLS=['Fecha/Hora','Contador','Posición','Tipo intruso','Código','Tipo de código','SKU','Descripción','Bultos','Unid x Bulto','Unidades','Lote','Lote ilegible','Vencimiento','Vto ilegible','Identificado','Observaciones'];
+const COLS=['Fecha/Hora','Contador','Posición','Tipo intruso','Código','Tipo de código','SKU','Descripción','Bultos','Unid x Bulto','Unidades','Vencimiento','Vto ilegible','Identificado','Observaciones'];
 function filasExport(){
   return registros.map(r=>[ r.ts, r.contador, r.posicion,
     r.tipoIntruso==='VACIA'?'Posición vacía por sistema':'Cruzado',
     r.codigo, r.tipoCodigo, r.sku, r.descripcion, r.bultos,
     r.unidXBulto||'', r.unidades!==''?r.unidades:'',
-    r.lote||'', r.loteIlegible?'SI':'', r.vencimiento, r.vtoIlegible?'SI':'',
+    r.vencimiento, r.vtoIlegible?'SI':'',
     r.identificado?'SI':'NO', r.obs ]);
 }
 function nombreArchivo(ext){
@@ -610,7 +587,7 @@ function nombreArchivo(ext){
 function exportarXLSX(){
   if(!registros.length){ toast('No hay registros para exportar','error'); return; }
   const ws=XLSX.utils.aoa_to_sheet([COLS, ...filasExport()]);
-  ws['!cols']=COLS.map((c,i)=>({wch:[18,16,12,22,16,22,10,34,8,11,10,14,10,12,10,11,26][i]||14}));
+  ws['!cols']=COLS.map((c,i)=>({wch:[18,16,12,22,16,22,10,34,8,11,10,12,10,11,26][i]||14}));
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Intrusos');
   XLSX.writeFile(wb, nombreArchivo('xlsx'));
 }
@@ -639,11 +616,26 @@ function guardarConfig(){
 }
 $('inpContador').addEventListener('change', guardarConfig);
 
+function aplicarTecladoPos(){
+  const alfa = !!config.posAlfa;
+  $('inpPosicion').setAttribute('inputmode', alfa?'text':'numeric');
+  $('btnTecladoPos').innerHTML = (alfa?'ABC':'123')+'<br><span style="font-size:.62rem; color:var(--muted);">teclado</span>';
+}
+function toggleTecladoPos(){
+  config.posAlfa = !config.posAlfa;
+  localStorage.setItem(K_CFG, JSON.stringify(config));
+  aplicarTecladoPos();
+  const inp=$('inpPosicion');
+  if(document.activeElement===inp){ inp.blur(); setTimeout(()=>inp.focus(),50); } // refresca el teclado si estaba abierto
+  toast('Teclado de posición: '+(config.posAlfa?'alfanumérico':'numérico'));
+}
+
 /* ================== INIT ================== */
 (function init(){
   $('badgeCant').textContent=registros.length;
   if(config.ejercicio){ $('inpEjercicio').value=config.ejercicio; $('subHeader').textContent=config.ejercicio; }
   if(config.contador){ $('inpContador').value=config.contador; }
+  aplicarTecladoPos();
   pintarMaestro(); pintarRegistros();
 })();
 </script>

@@ -130,6 +130,7 @@
 
 <!-- ============ TAB RELEVAR ============ -->
 <section id="secRelevar">
+  <div id="avisoSinMaestro" class="maestro-estado vacio oculto">⚠ Este dispositivo no tiene el maestro cargado: todos los códigos van a salir "sin identificar". Cargalo en la pestaña <b>Maestro</b>.</div>
   <div class="card">
     <label>Contador / Relevador</label>
     <input type="text" id="inpContador" placeholder="Nombre y apellido" autocomplete="off">
@@ -330,13 +331,23 @@ function buscarEnIndice(codRaw, skus, indice){
 /*__LOGIC_FIN__*/
 
 /* ================== ESTADO ================== */
-const K_REG='intrusos_py_registros', K_MAE='intrusos_py_maestro_v2', K_CFG='intrusos_py_config';
+const K_REG='intrusos_py_registros', K_MAE='intrusos_py_maestro_v3', K_CFG='intrusos_py_config';
+function serializarMaestro(m){ // formato compacto: arrays en vez de objetos
+  return JSON.stringify({v:3, a:m.archivo, f:m.fecha, h:m.headers,
+    s:m.skus.map(s=>[s.sku, s.descripcion, s.codigos.join(' '), s.unid_x_bulto||0, s.req_vto, s.req_lote])});
+}
+function deserializarMaestro(txt){
+  const o=JSON.parse(txt||'null'); if(!o) return null;
+  if(o.v===3) return {archivo:o.a, fecha:o.f, headers:o.h,
+    skus:o.s.map(a=>({sku:a[0], descripcion:a[1], codigos:a[2]?a[2].split(' '):[], unid_x_bulto:a[3]||null, req_vto:a[4], req_lote:a[5]}))};
+  return o.skus ? o : null;
+}
 let registros = JSON.parse(localStorage.getItem(K_REG)||'[]');
 let maestro   = null;   // {skus, headers, fecha, archivo} — el índice se reconstruye al iniciar
 let indice    = {};
 let productoActual = null;
 let scanner = null;
-try{ maestro=JSON.parse(localStorage.getItem(K_MAE)||'null'); if(maestro) indice=construirIndice(maestro.skus); }catch(e){ maestro=null; }
+try{ maestro=deserializarMaestro(localStorage.getItem(K_MAE)); if(maestro) indice=construirIndice(maestro.skus); }catch(e){ maestro=null; }
 let config = JSON.parse(localStorage.getItem(K_CFG)||'{}');
 
 const $ = id => document.getElementById(id);
@@ -360,16 +371,19 @@ $('inpMaestro').addEventListener('change', e=>{
       const skus=parsearFilas(filas, map);
       maestro={skus, headers:map, fecha:hoyISO(), archivo:f.name};
       indice=construirIndice(skus);
-      try{ localStorage.setItem(K_MAE, JSON.stringify(maestro)); }
-      catch(err){ toast('Maestro cargado en memoria (muy grande para persistir: recargalo si cerrás la app)','error'); }
+      let persistido=true;
+      try{ localStorage.setItem(K_MAE, serializarMaestro(maestro)); }
+      catch(err){ persistido=false; }
       pintarMaestro();
-      toast('Maestro cargado: '+skus.length+' SKU','exito');
+      if(persistido){ toast('Maestro cargado y guardado: '+skus.length+' SKU','exito'); }
+      else{ alert('El maestro se cargó ('+skus.length+' SKU) pero NO se pudo guardar en este dispositivo: al cerrar la app vas a tener que volver a cargarlo.'); }
     }catch(err){ console.error(err); toast('Error al leer el archivo','error'); }
   };
   r.readAsArrayBuffer(f);
 });
 function pintarMaestro(){
   const est=$('estadoMaestro');
+  $('avisoSinMaestro').className = (maestro && maestro.skus.length) ? 'maestro-estado vacio oculto' : 'maestro-estado vacio';
   if(maestro && maestro.skus.length){
     const nCods=Object.keys(indice).length;
     const conVto=maestro.skus.filter(s=>s.req_vto==='SI').length;
@@ -434,11 +448,12 @@ function procesarCodigo(codRaw){
     else { bLote.className=''; $('lblLote').textContent='Lote (si corresponde)'; }
   } else {
     const cl=clasificarCodigo(res.codigo);
+    const sinMaestro = !maestro || !maestro.skus.length;
     ficha.className='producto desconocido';
     ficha.innerHTML =
-      '<div class="desc">Código no identificado</div>'+
+      '<div class="desc">'+(sinMaestro?'Sin maestro en este dispositivo':'Código no identificado')+'</div>'+
       '<div class="meta"><span class="chip mono">'+res.codigo+'</span><span class="chip tipo">'+cl.tipo+'</span>'+(cl.ok?'':'<span class="chip warn">⚠ verificador inválido: revisá el escaneo</span>')+'</div>'+
-      '<div class="aviso-validar">⚠ No está en el maestro. Cargá la descripción manual; queda marcado para revisión.</div>';
+      '<div class="aviso-validar">'+(sinMaestro?'⚠ Cargá el maestro en la pestaña Maestro para identificar productos.':'⚠ No está en el maestro. Cargá la descripción manual; queda marcado para revisión.')+'</div>';
     bNoId.className='';
     bVto.className=''; $('lblVto').textContent='Vencimiento (si corresponde)';
     bLote.className=''; $('lblLote').textContent='Lote (si corresponde)';

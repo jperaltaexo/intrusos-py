@@ -96,9 +96,9 @@
   .tag.cruzado{background:#fee2e2; color:#991b1b;}
   .tag.noident{background:#fef3c7; color:#92400e;}
 
-  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
-    padding:12px 22px; border-radius:10px; font-weight:700; z-index:200; opacity:0; transition:opacity .25s;
-    pointer-events:none; max-width:90%; text-align:center;}
+  .toast{position:fixed; top:112px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:14px 24px; border-radius:10px; font-weight:800; font-size:1.05rem; z-index:200; opacity:0; transition:opacity .25s;
+    pointer-events:none; max-width:90%; text-align:center; box-shadow:0 4px 14px rgba(0,0,0,.3);}
   .toast.ver{opacity:1;}
   .toast.exito{background:var(--accion);}
   .toast.error{background:var(--peligro);}
@@ -124,6 +124,7 @@
   <button id="tabRelevar" class="activo" onclick="irTab('relevar')">Relevar</button>
   <button id="tabRegistros" onclick="irTab('registros')">Registros <span class="badge" id="badgeCant">0</span></button>
   <button id="tabMaestro" onclick="irTab('maestro')">Maestro</button>
+  <button id="tabAsn" onclick="irTab('asn')">ASN</button>
 </nav>
 
 <main>
@@ -223,6 +224,43 @@
   </div>
 </section>
 
+<!-- ============ TAB ASN ============ -->
+<section id="secAsn" class="oculto">
+  <div class="card">
+    <h2>Generar ASN para Infor</h2>
+    <p class="nota">Unifica los exportables de intrusos de todos los relevadores y arma el archivo <b>.xls (Excel 2003)</b> con las 3 pestañas (Data / Detail / Validations), todo en formato texto, listo para que IT lo cargue. Este paso se hace una sola vez, en la compu, al cierre del relevamiento.</p>
+
+    <label>Nº de ASN / RECEIPTKEY</label>
+    <input type="text" id="inpAsnKey" class="mono" inputmode="numeric" placeholder="Ej: 9000000113">
+
+    <label>Usuario (creado por)</label>
+    <input type="text" id="inpAsnUsuario" placeholder="Ej: peralta jorge">
+
+    <div class="fila">
+      <div>
+        <label>Lote genérico (LOTTABLE03)</label>
+        <input type="text" id="inpAsnLote" class="mono" autocapitalize="characters">
+      </div>
+      <div>
+        <label>Vto genérico (si falta)</label>
+        <input type="date" id="inpAsnVtoGen">
+      </div>
+    </div>
+
+    <label>Exportables de intrusos (podés seleccionar varios)</label>
+    <input type="file" id="inpAsnArchivos" accept=".xlsx,.xls,.csv" multiple style="font-size:.9rem;">
+
+    <div style="margin-top:14px;">
+      <button class="btn btn-escanear" onclick="procesarASN()">⚙ Procesar intrusos</button>
+    </div>
+    <div id="resumenAsn" style="margin-top:12px;"></div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-guardar oculto" id="btnDescargarAsn" onclick="descargarASN()">⬇ Descargar ASN (.xls)</button>
+    </div>
+  </div>
+  <p class="nota">Reglas aplicadas: QTYEXPECTED en <b>unidades</b> (bultos × UxB) · PACKKEY desde la columna PACK del maestro · líneas agrupadas por SKU + posición + vencimiento · LOTTABLE02 = DSP · STATUS = 0 · LPN vacío · vencimiento en formato dd/mm/yyyy 08:00 · SUSR4 = "UxB= n" (sin este dato Infor no procesa la línea, por eso las líneas sin UxB se excluyen y se listan).</p>
+</section>
+
 </main>
 
 <!-- Modal scanner -->
@@ -254,6 +292,7 @@ const SIN_PRIORITARIOS = { // se buscan primero (más específicos)
 const SINONIMOS = {
   sku:         h => /(^|\b)(sku|material|item|c[oó]digo\s*interno|art[ií]culo)\b/.test(h),
   descripcion: h => /descrip|denomin|nombre/.test(h),
+  pack:        h => /^pack(key)?$/.test(h),
   unid_x_bulto:h => /unid\w*\s*(x|por|×)\s*(bulto|caja)|\bupb\b|factor/.test(h),
   req_vto:     h => /vto|venc|caduc|lote/.test(h),
   codigo:      h => /\bean\b|\bdun\b|\bupc\b|\bgtin\b|\bitf\b|barra|bl[ií]ster|blister|otros\s*c[oó]d/.test(h)
@@ -264,7 +303,7 @@ function detectarColumnas(headers){
   Object.keys(SIN_PRIORITARIOS).forEach(campo=>{
     hn.forEach((h,i)=>{ if(map[campo]===undefined && !usadas.has(i) && h && SIN_PRIORITARIOS[campo](h)){ map[campo]=i; usadas.add(i); } });
   });
-  ['sku','descripcion','unid_x_bulto','req_vto'].forEach(campo=>{
+  ['sku','descripcion','pack','unid_x_bulto','req_vto'].forEach(campo=>{
     hn.forEach((h,i)=>{ if(map[campo]===undefined && !usadas.has(i) && h && SINONIMOS[campo](h)){ map[campo]=i; usadas.add(i); } });
   });
   hn.forEach((h,i)=>{ if(!usadas.has(i) && h && SINONIMOS.codigo(h)){ map.codigos.push(i); usadas.add(i); } });
@@ -291,7 +330,7 @@ function parsearFilas(filas, map){
     const cods=[];
     map.codigos.forEach(ci=>{ tokensCodigo(fila[ci]).forEach(c=>{ if(!cods.includes(c)) cods.push(c); }); });
     skus.push({
-      sku:g(map.sku), descripcion:g(map.descripcion),
+      sku:g(map.sku), descripcion:g(map.descripcion), pack:g(map.pack),
       codigos:cods, unid_x_bulto:parseUnidXBulto(g(map.unid_x_bulto)),
       req_vto:val.vto, req_lote:val.lote
     });
@@ -325,15 +364,15 @@ function buscarEnIndice(codRaw, skus, indice){
 /*__LOGIC_FIN__*/
 
 /* ================== ESTADO ================== */
-const K_REG='intrusos_py_registros', K_MAE='intrusos_py_maestro_v3', K_CFG='intrusos_py_config';
+const K_REG='intrusos_py_registros', K_MAE='intrusos_py_maestro_v4', K_CFG='intrusos_py_config';
 function serializarMaestro(m){ // formato compacto: arrays en vez de objetos
-  return JSON.stringify({v:3, a:m.archivo, f:m.fecha, h:m.headers,
-    s:m.skus.map(s=>[s.sku, s.descripcion, s.codigos.join(' '), s.unid_x_bulto||0, s.req_vto, s.req_lote])});
+  return JSON.stringify({v:4, a:m.archivo, f:m.fecha, h:m.headers,
+    s:m.skus.map(s=>[s.sku, s.descripcion, s.codigos.join(' '), s.unid_x_bulto||0, s.req_vto, s.req_lote, s.pack||''])});
 }
 function deserializarMaestro(txt){
   const o=JSON.parse(txt||'null'); if(!o) return null;
-  if(o.v===3) return {archivo:o.a, fecha:o.f, headers:o.h,
-    skus:o.s.map(a=>({sku:a[0], descripcion:a[1], codigos:a[2]?a[2].split(' '):[], unid_x_bulto:a[3]||null, req_vto:a[4], req_lote:a[5]}))};
+  if(o.v===4||o.v===3) return {archivo:o.a, fecha:o.f, headers:o.h,
+    skus:o.s.map(a=>({sku:a[0], descripcion:a[1], codigos:a[2]?a[2].split(' '):[], unid_x_bulto:a[3]||null, req_vto:a[4], req_lote:a[5], pack:a[6]||''}))};
   return o.skus ? o : null;
 }
 let registros = JSON.parse(localStorage.getItem(K_REG)||'[]');
@@ -450,6 +489,8 @@ function procesarCodigo(codRaw){
 }
 $('inpCodigo').addEventListener('change', e=>procesarCodigo(e.target.value));
 $('inpCodigo').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); procesarCodigo(e.target.value); }});
+$('inpBultos').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('inpObs').focus(); }});
+$('inpObs').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); guardar(); }});
 
 /* ================== SCANNER ================== */
 function abrirScanner(){
@@ -513,7 +554,7 @@ function guardar(){
   registros.push({
     id:Date.now(), ts:hoyISO(), contador, posicion, tipoIntruso,
     codigo:codN, tipoCodigo: productoActual.encontrado?productoActual.tipoCodigo:'No identificado',
-    sku: s?s.sku:'', descripcion: s?s.descripcion:descManual,
+    sku: s?s.sku:'', pack: s?(s.pack||''):'', descripcion: s?s.descripcion:descManual,
     bultos, unidXBulto:unidXB, unidades: unidXB?bultos*unidXB:'',
     vencimiento:vto, vtoIlegible, obs,
     identificado:productoActual.encontrado
@@ -571,13 +612,17 @@ function borrarTodo(){
 }
 
 /* ================== EXPORTAR ================== */
-const COLS=['Fecha/Hora','Contador','Posición','Tipo intruso','Código','Tipo de código','SKU','Descripción','Bultos','Unid x Bulto','Unidades','Vencimiento','Vto ilegible','Identificado','Observaciones'];
+const COLS=['Fecha/Hora','Contador','Posición','Tipo intruso','Código','Tipo de código','SKU','Pack','Descripción','Bultos','Unid x Bulto','Unidades','Vencimiento','Vto ilegible','Identificado','Observaciones'];
+function fmtFechaAR(v){ // yyyy-mm-dd -> dd/mm/yyyy
+  const m=String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : String(v||'');
+}
 function filasExport(){
   return registros.map(r=>[ r.ts, r.contador, r.posicion,
     r.tipoIntruso==='VACIA'?'Posición vacía por sistema':'Cruzado',
-    r.codigo, r.tipoCodigo, r.sku, r.descripcion, r.bultos,
+    r.codigo, r.tipoCodigo, r.sku, r.pack||'', r.descripcion, r.bultos,
     r.unidXBulto||'', r.unidades!==''?r.unidades:'',
-    r.vencimiento, r.vtoIlegible?'SI':'',
+    fmtFechaAR(r.vencimiento), r.vtoIlegible?'SI':'',
     r.identificado?'SI':'NO', r.obs ]);
 }
 function nombreArchivo(ext){
@@ -587,7 +632,7 @@ function nombreArchivo(ext){
 function exportarXLSX(){
   if(!registros.length){ toast('No hay registros para exportar','error'); return; }
   const ws=XLSX.utils.aoa_to_sheet([COLS, ...filasExport()]);
-  ws['!cols']=COLS.map((c,i)=>({wch:[18,16,12,22,16,22,10,34,8,11,10,12,10,11,26][i]||14}));
+  ws['!cols']=COLS.map((c,i)=>({wch:[18,16,12,22,16,22,10,14,34,8,11,10,12,10,11,26][i]||14}));
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Intrusos');
   XLSX.writeFile(wb, nombreArchivo('xlsx'));
 }
@@ -600,13 +645,166 @@ function exportarCSV(){
   a.download=nombreArchivo('csv'); a.click(); URL.revokeObjectURL(a.href);
 }
 
+/* ================== ASN PARA INFOR ================== */
+const ASN_TPL={"data":{"h1":["Column Name","GenericKey","RECEIPTKEY","STORERKEY","WAREHOUSEREFERENCE","EXPECTEDRECEIPTDATE","EXTERNRECEIPTKEY","POKEY","CARRIERNAME","CARRIERREFERENCE","CONTAINERKEY","RECEIPTDATE","STATUS","TYPE","CLOSEDDATE","VERIFIEDCLOSEDDATE","EARLIESTSHIPDATE","REQUIREDSHIPDATE","ScheduledShipDate","ActualShipDate","EARLIESTDELIVERYDATE","REQUIREDDELIVERYDATE","ArrivalDateTime","ACTUALDEPARTUREDATE","DOOR","APPOINTMENTKEY","EFFECTIVEDATE","EXTERNALRECEIPTKEY2","GrossWeight","TotalVolume","TRANSPORTATIONSTATUS","ADVICEDATE","ADVICENUMBER","ALLOWAUTORECEIPT","PACKINGSLIPNUMBER","RMA","SUSR1","SUSR2","SUSR3","SUSR4","SUSR5","TRACKINVENTORYBY","ShipFromAddressLine1","ShipFromAddressLine2","ShipFromAddressLine3","ShipFromAddressLine4","SHIPFROMADDRESSLINE5","SHIPFROMADDRESSLINE6","ShipFromCity","ShipFromContact","ShipFromEmail","ShipFromISOCountry","ShipFromPhone","ShipFromState","ShipFromZip","SupplierCode","SupplierName","CARRIERADDRESS1","CARRIERADDRESS2","CARRIERCITY","CarrierCountry","CARRIERKEY","CarrierPhone","CARRIERSTATE","CARRIERZIP","DriverName","TRAILERKEY","TrailerNumber","TrailerOwner","TrailerType","VEHICLENUMBER","VEHICLEDATE","TEMPERATURE","CONTAINERQTY","CONTAINERTYPE","PRONUMBER","DESTINATIONCOUNTRY","INCOTERMS","NOTES","ORIGINCOUNTRY","PLACEOFDELIVERY","PLACEOFDISCHARGE","PLACEOFLOADING","TERMSNOTE","TRANSPORTATIONMODE","TRANSPORTATIONSERVICE","CARRIERROUTESTATUS","FREIGHTCHARGEAMOUNT","TMFREIGHTCHARGECURRENCY","FREIGHTCOSTAMOUNT","TMFREIGHTCOSTCURRENCY","ADDDATE","ADDWHO","EDITDATE","EDITWHO","SOURCELOCATION","SOURCEVERSION","REFERENCETYPE","REFERENCEDOCUMENT","REFERENCELOCATION","REFERENCEVERSION","USERAINBOW","EXT_UDF_STR1","EXT_UDF_STR2","EXT_UDF_STR3","EXT_UDF_STR4","EXT_UDF_STR5","EXT_UDF_STR6","EXT_UDF_STR7","EXT_UDF_STR8","EXT_UDF_STR9","EXT_UDF_STR10","EXT_UDF_STR11","EXT_UDF_STR12","EXT_UDF_STR13","EXT_UDF_STR14","EXT_UDF_STR15","EXT_UDF_DATE1","EXT_UDF_DATE2","EXT_UDF_DATE3","EXT_UDF_DATE4","EXT_UDF_DATE5","EXT_UDF_FLOAT1","EXT_UDF_FLOAT2","EXT_UDF_FLOAT3","EXT_UDF_FLOAT4","EXT_UDF_FLOAT5","EXT_UDF_LKUP1","EXT_UDF_LKUP2","EXT_UDF_LKUP3","EXT_UDF_LKUP4","EXT_UDF_LKUP5","EXT_UDF_LKUP6","EXT_UDF_LKUP7","EXT_UDF_LKUP8","EXT_UDF_LKUP9","EXT_UDF_LKUP10"],"h2":["Messages","GenericKey","ASN/Recepción","Propietario","Referencia de almacén","Fecha recepción esperada","Recepción externa","Orden de compra","Nombre de transportista","Referencia de transportista","Referencia de contenedor","Última fecha de recepción","Estatus de recepción","Tipo","Fecha de cierre","Fecha verificada y cerrada:","Fecha de expedición más próxima","Fecha de expedición solicitada o más lejana","Fecha de expedición programada","Fecha real de expedición","Fecha de llegada más próxima","Fecha de llegada solicitada o más lejana","Fecha de llegada real","Fecha de salida real","Muelle","Número de la cita","Fecha de sustitución de transacción","Referencia de proveedor","Peso bruto","Volumen total","Estatus de transporte","Fecha Aviso/GRN","Número Aviso/GRN","Permitir recepción automática:","Nº nota embalaje","RMA","Cabecera ASN UDF1","Cabecera ASN UDF2","Cabecera ASN UDF3","Cabecera ASN UDF4","Cabecera ASN UDF5","Seguimiento para recepción de cajas:","Línea 1 de dirección del expedidor:","Línea 2 de dirección del expedidor:","Línea 3 de dirección del expedidor:","Línea 4 de dirección del expedidor:","Línea 5 de dirección del expedidor:","Línea 6 de dirección del expedidor:","Ciudad del expedidor","Contacto:","Correo electrónico:","Código ISO de país:","Teléfono:","Estado del expedidor","Código postal expedidor","Código del expedidor","Nombre del expedidor","Dirección 1:","Dirección 2:","Ciudad:","País:","Cód. transp.","Teléfono:","Estado:","Código postal:","Nombre del conductor","Código de remolque","Número de remolque","Propietario del remolque","Tipo de remolque","Número del vehículo","Fecha de carga","Temperatura","Cantidad:","Tipo:","Número Pro","País de destino","Condiciones de entrega:","Notas","País de origen:","Lugar de entrega:","Lugar de descarga:","Lugar de carga:","Condiciones de pago:","Modo de transporte","Servicio de transporte:","Estatus de TM","Cantidad de cargo de flete","Divisa de cargo de flete","Cantidad de costo de flete:","Divisa de costo de flete:","Fecha de creación","Creado por","Fecha de actualización","Actualizado por","Ubicación origen recepción","Versión de origen","Tipo de documento de inicio","Documento de inicio","Ubicación de documento de inicio","Versión de referencia","Crear palets Rainbow durante la recepción","Recepción ASN - Texto - CDU 1","Recepción ASN - Texto - CDU 2","Recepción ASN - Texto - CDU 3","Recepción ASN - Texto - CDU 4","Recepción ASN - Texto - CDU 5","Recepción ASN - Texto - CDU 6","Recepción ASN - Texto - CDU 7","Recepción ASN - Texto - CDU 8","Recepción ASN - Texto - CDU 9","Recepción ASN - Texto - CDU 10","Recepción ASN - Texto - CDU 11","Recepción ASN - Texto - CDU 12","Recepción ASN - Texto - CDU 13","Recepción ASN - Texto - CDU 14","Recepción ASN - Texto - CDU 15","Recepción ASN - Fecha - CDU 1","Recepción ASN - Fecha - CDU 2","Recepción ASN - Fecha - CDU 3","Recepción ASN - Fecha - CDU 4","Recepción ASN - Fecha - CDU 5","Recepción ASN - Numérico - CDU 1","Recepción ASN - Numérico - CDU 2","Recepción ASN - Numérico - CDU 3","Recepción ASN - Numérico - CDU 4","Recepción ASN - Numérico - CDU 5","Recepción ASN - Lista de códigos - CDU 1","Recepción ASN - Lista de códigos - CDU 2","Recepción ASN - Lista de códigos - CDU 3","Recepción ASN - Lista de códigos - CDU 4","Recepción ASN - Lista de códigos - CDU 5","Recepción ASN - Lista de códigos - CDU 6","Recepción ASN - Lista de códigos - CDU 7","Recepción ASN - Lista de códigos - CDU 8","Recepción ASN - Lista de códigos - CDU 9","Recepción ASN - Lista de códigos - CDU 10"],"modelo":["","","9000000113","PEYA","","","WMS9000000113","","","","","10/01/2024 18:07","0","1","","","","","","","","","","","","","","","","","","10/01/2024 18:12","","0","","","","","","","","0","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","PENDING","","","","","10/01/2024 18:12","murphy guillermo","10/01/2024 18:12","murphy guillermo","","","","","","","0","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""]},"detail":{"h1":["Column Name","GenericKey","RECEIPTKEY","SKU","STORERKEY","RECEIPTLINENUMBER","QTYEXPECTED","QTYRECEIVED","UOM","PACKKEY","TOID","TOLOC","POKEY","CONDITIONCODE","STATUS","LOTTABLE01","LOTTABLE02","LOTTABLE03","LOTTABLE04","LOTTABLE05","LOTTABLE06","LOTTABLE07","LOTTABLE08","LOTTABLE09","LOTTABLE10","LOTTABLE11","LOTTABLE12","CONTAINERKEY","CUBE","GROSSWGT","NETWGT","TAREWGT","TEMPERATURE","DATERECEIVED","DISPOSITIONCODE","DISPOSITIONTYPE","EFFECTIVEDATE","EXTERNALLOT","EXTERNLINENO","EXTERNRECEIPTKEY","ID","MatchLottable","NOTES","PACKINGSLIPQTY","POLineNumber","QCAUTOADJUST","QCQTYINSPECTED","QCQTYREJECTED","QCREJREASON","QCREQUIRED","QCSTATUS","QCUSER","QtyRejected","REASONCODE","RETURNCONDITION","RETURNREASON","RETURNTYPE","RMA","SupplierKey","SupplierName","SUSR1","SUSR2","SUSR3","SUSR4","SUSR5","TARIFFKEY","TOLOT","TYPE","CUBICMETER","HUNDREDWEIGHT","ADDDATE","ADDWHO","EDITDATE","EDITWHO","SOURCELOCATION","SOURCEVERSION","REFERENCETYPE","REFERENCEDOCUMENT","REFERENCELOCATION","REFERENCEVERSION","ReferenceScheduleLine","REFERENCELINE","PRODUCTIONORDERACCENTITY","PRODUCTIONORDERDOCUMENT","PRODUCTIONORDERLINE","PRODUCTIONORDERLOCATION","PRODUCTIONORDERSCHEDULELINE","PURCHASEORDERACCOUNTINGENTITY","PURCHASEORDERDOCUMENT","PURCHASEORDERLINE","PURCHASEORDERLOCATION","PURCHASEORDERSCHEDULELINE","REQUISITIONACCOUNTINGENTITY","REQUISITIONDOCUMENT","REQUISITIONLINE","REQUISITIONLOCATION","SALESORDERACCOUNTINGENTITY","SALESORDERDOCUMENT","SALESORDERLINE","SALESORDERLOCATION","SALESORDERSCHEDULELINE","EXT_UDF_STR1","EXT_UDF_STR2","EXT_UDF_STR3","EXT_UDF_STR4","EXT_UDF_STR5","EXT_UDF_STR6","EXT_UDF_STR7","EXT_UDF_STR8","EXT_UDF_STR9","EXT_UDF_STR10","EXT_UDF_STR11","EXT_UDF_STR12","EXT_UDF_STR13","EXT_UDF_STR14","EXT_UDF_STR15","EXT_UDF_DATE1","EXT_UDF_DATE2","EXT_UDF_DATE3","EXT_UDF_DATE4","EXT_UDF_DATE5","EXT_UDF_FLOAT1","EXT_UDF_FLOAT2","EXT_UDF_FLOAT3","EXT_UDF_FLOAT4","EXT_UDF_FLOAT5","EXT_UDF_LKUP1","EXT_UDF_LKUP2","EXT_UDF_LKUP3","EXT_UDF_LKUP4","EXT_UDF_LKUP5","EXT_UDF_LKUP6","EXT_UDF_LKUP7","EXT_UDF_LKUP8","EXT_UDF_LKUP9","EXT_UDF_LKUP10"],"h2":["Messages","GenericKey","ASN/Recepción","Artículo","Propietario","Nº de línea","Cantidad esperada","Ctd. recibida","UDM","Paquete","LPN","Ubicación","OC/Orden","Código de bloqueo","Estatus","Atributo01","Atributo02","Atributo03","Fecha de fabricación","Fecha de vencimiento","Atributo06","Atributo07","Atributo08","Atributo09","Atributo10","Entrega antes de","Consumo antes de","Referencia de contenedor:","Vol. cúbico recibido:","Peso bruto","Peso neto","Peso tara","Temperatura","Fecha de recepción","Código de disposición:","Tipo de disposición:","Fecha de sustitución de transacción:","Lote externo:","Nº de línea externa","Nº de ASN externo","Id.","Atributo coincidente","Notas:","Embalaje:","Número de línea de OC/orden:","Ajuste auto. CC:","Inspeccionado:","Rechazado:","Motivo de rechazo:","CC requerido","Estatus CC","Inspeccionado por","Rechazadas","Código de motivo:","Condición:","Código de motivo:","Tipo:","Número RMA","Proveedor","Nombre del expedidor:","Línea ASN UDF1","Línea ASN UDF2","Línea ASN UDF3","Línea ASN UDF4","Línea ASN UDF5","Tarifa:","Nº lote","Tipo","Metro cúbico:","Peso de centenas:","Fecha de creación","Creado por","Fecha de actualización","Actualizado por","Ubicación origen recepción:","SOURCEVERSION","Tipo de documento de inicio","Documento de inicio","Ubicación de documento de inicio","REFERENCEVERSION","Línea de calendario de referencia","Línea de referencia","Entidad de orden de producción","Documento de orden de producción","Línea de orden de producción","Ubicación de orden de producción","Línea de programación de orden de producción","Entidad de orden de compra","Documento de orden de compra","Línea de orden de compra","Ubicación de la orden de compra","Línea de calendario de orden de compra:","Entidad de solicitud","Documento de solicitud","Línea programación","Ubicación de solicitud","Entidad orden ventas","Documento de orden de venta","Línea de orden de venta","Ubicación de orden de venta","Línea de programación de orden de venta","Detalle de recepción ASN - Texto - CDU 1","Detalle de recepción ASN - Texto - CDU 2","Detalle de recepción ASN - Texto - CDU 3","Detalle de recepción ASN - Texto - CDU 4","Detalle de recepción ASN - Texto - CDU 5","Detalle de recepción ASN - Texto - CDU 6","Detalle de recepción ASN - Texto - CDU 7","Detalle de recepción ASN - Texto - CDU 8","Detalle de recepción ASN - Texto - CDU 9","Detalle de recepción ASN - Texto - CDU 10","Detalle de recepción ASN - Texto - CDU 11","Detalle de recepción ASN - Texto - CDU 12","Detalle de recepción ASN - Texto - CDU 13","Detalle de recepción ASN - Texto - CDU 14","Detalle de recepción ASN - Texto - CDU 15","Detalle de recepción ASN - Fecha - CDU 1","Detalle de recepción ASN - Fecha - CDU 2","Detalle de recepción ASN - Fecha - CDU 3","Detalle de recepción ASN - Fecha - CDU 4","Detalle de recepción ASN - Fecha - CDU 5","Detalle de recepción ASN - Numérico - CDU 1","Detalle de recepción ASN - Numérico - CDU 2","Detalle de recepción ASN - Numérico - CDU 3","Detalle de recepción ASN - Numérico - CDU 4","Detalle de recepción ASN - Numérico - CDU 5","Detalle de recepción ASN - Lista de códigos - CDU 1","Detalle de recepción ASN - Lista de códigos - CDU 2","Detalle de recepción ASN - Lista de códigos - CDU 3","Detalle de recepción ASN - Lista de códigos - CDU 4","Detalle de recepción ASN - Lista de códigos - CDU 5","Detalle de recepción ASN - Lista de códigos - CDU 6","Detalle de recepción ASN - Lista de códigos - CDU 7","Detalle de recepción ASN - Lista de códigos - CDU 8","Detalle de recepción ASN - Lista de códigos - CDU 9","Detalle de recepción ASN - Lista de códigos - CDU 10"],"modelo":["","","9000000113","19218751","PEYA","00001","50","0.00000","EA","19218751_C10","","110201700"," ","","0"," ","DSP","L100124","","12/09/2024 08:00"," "," "," "," "," ","","","","0.0","0.0","0.0","0.0","","10/01/2024 18:12","","","","","WMS00001","WMS9000000113","","0","","0.00000","","0","0.00000","0.00000","","0","N","","0.00000","","","","","","","","","","","UxB= 10","","XXXXXXXXXX","","1","0.00000","0.00000","10/01/2024 18:12","murphy guillermo","10/01/2024 18:12","murphy guillermo","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""]},"validations":[["Date Format","dd/MM/yyyy HH:mm","MM Month, dd:Day, yy:year, mm:minute, hh:hours","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["Time Zone","(GMT-03:00) Buenos Aires","America/Buenos_Aires","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["Empty Fields","[blank]","To remove existing values in character fields and leave them empty, place the value [blank] (including the brackets) in the respective cells on the import spreadsheet.","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","America/Buenos_Aires","(GMT-03:00) Buenos Aires","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","MM/dd/yyyy hh:mm:ss","","(GMT+02:00) Cairo","Africa/Cairo","(GMT+02:00) Cairo"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","dd/MM/yyyy hh:mm:ss","","(GMT) Casablanca","Africa/Casablanca","(GMT) Casablanca"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","yyyy/MM/dd hh:mm:ss","","(GMT+02:00) Harare, Pretoria","Africa/Harare","(GMT+02:00) Harare, Pretoria"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+01:00) West Central Africa","Africa/Kinshasa","(GMT+01:00) West Central Africa"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+03:00) Nairobi","Africa/Nairobi","(GMT+03:00) Nairobi"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-09:00) Alaska","America/Anchorage","(GMT-09:00) Alaska"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Asuncion","America/Asuncion","(GMT-04:00) Asuncion"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-06:00) Central America","America/Belize","(GMT-06:00) Central America"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-05:00) Bogota, Lima, Quito","America/Bogota","(GMT-05:00) Bogota, Lima, Quito"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:00) Buenos Aires","America/Buenos_Aires","(GMT-03:00) Buenos Aires"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Caracas","America/Caracas","(GMT-04:00) Caracas"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:00) Cayenne","America/Cayenne","(GMT-03:00) Cayenne"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-06:00) Central Time (US & Canada)","America/Chicago","(GMT-06:00) Central Time (US & Canada)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-07:00) Chihuahua, La Paz, Mazatlan","America/Chihuahua","(GMT-07:00) Chihuahua, La Paz, Mazatlan"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-07:00) Mountain Time (US & Canada)","America/Denver","(GMT-07:00) Mountain Time (US & Canada)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:00) Greenland","America/Godthab","(GMT-03:00) Greenland"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Atlantic Time (Canada)","America/Halifax","(GMT-04:00) Atlantic Time (Canada)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-05:00) Indiana (East)","America/Indianapolis","(GMT-05:00) Indiana (East)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Georgetown, La Paz, San Juan","America/La_Paz","(GMT-04:00) Georgetown, La Paz, San Juan"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-08:00) Pacific Time (US & Canada)","America/Los_Angeles","(GMT-08:00) Pacific Time (US & Canada)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Manaus","America/Manaus","(GMT-04:00) Manaus"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-06:00) Guadalajara, Mexico City, Monterrey","America/Mexico_City","(GMT-06:00) Guadalajara, Mexico City, Monterrey"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:00) Montevideo","America/Montevideo","(GMT-03:00) Montevideo"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-05:00) Eastern Time (US & Canada)","America/New_York","(GMT-05:00) Eastern Time (US & Canada)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-07:00) Arizona","America/Phoenix","(GMT-07:00) Arizona"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-06:00) Saskatchewan","America/Regina","(GMT-06:00) Saskatchewan"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-04:00) Santiago","America/Santiago","(GMT-04:00) Santiago"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:00) Brasilia","America/Sao_Paulo","(GMT-03:00) Brasilia"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-03:30) Newfoundland","America/St_Johns","(GMT-03:30) Newfoundland"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-08:00) Tijuana, Baja California","America/Tijuana","(GMT-08:00) Tijuana, Baja California"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Amman","Asia/Amman","(GMT+02:00) Amman"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+03:00) Baghdad","Asia/Baghdad","(GMT+03:00) Baghdad"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:00) Baku","Asia/Baku","(GMT+04:00) Baku"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+07:00) Bangkok, Hanoi, Jakarta","Asia/Bangkok","(GMT+07:00) Bangkok, Hanoi, Jakarta"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Beirut","Asia/Beirut","(GMT+02:00) Beirut"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi","Asia/Calcutta","(GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:30) Sri Jayewardenepura","Asia/Colombo","(GMT+05:30) Sri Jayewardenepura"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+06:00) Astana, Dhaka","Asia/Dhaka","(GMT+06:00) Astana, Dhaka"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi","Asia/Hong_Kong","(GMT+08:00) Beijing, Chongqing, Hong Kong, Urumqi"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Irkutsk","Asia/Irkutsk","(GMT+08:00) Irkutsk"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Jerusalem","Asia/Jerusalem","(GMT+02:00) Jerusalem"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:30) Kabul","Asia/Kabul","(GMT+04:30) Kabul"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+12:00) Petropavlovsk-Kamchatsky","Asia/Kamchatka","(GMT+12:00) Petropavlovsk-Kamchatsky"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:00) Islamabad, Karachi","Asia/Karachi","(GMT+05:00) Islamabad, Karachi"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:30) Kathmandu","Asia/Kathmandu","(GMT+05:30) Kathmandu"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+07:00) Krasnoyarsk","Asia/Krasnoyarsk","(GMT+07:00) Krasnoyarsk"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+03:00) Kuwait, Riyadh","Asia/Kuwait","(GMT+03:00) Kuwait, Riyadh"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+11:00) Magadan, Solomon Is., New Caledonia","Asia/Magadan","(GMT+11:00) Magadan, Solomon Is., New Caledonia"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:00) Abu Dhabi, Muscat","Asia/Muscat","(GMT+04:00) Abu Dhabi, Muscat"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+06:00) Novosibirsk","Asia/Novosibirsk","(GMT+06:00) Novosibirsk"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+06:30) Yangon (Rangoon)","Asia/Rangoon","(GMT+06:30) Yangon (Rangoon)"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+09:00) Seoul","Asia/Seoul","(GMT+09:00) Seoul"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Kuala Lumpur, Singapore","Asia/Singapore","(GMT+08:00) Kuala Lumpur, Singapore"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Taipei","Asia/Taipei","(GMT+08:00) Taipei"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:00) Tashkent","Asia/Tashkent","(GMT+05:00) Tashkent"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:00) Tbilisi","Asia/Tbilisi","(GMT+04:00) Tbilisi"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+03:30) Tehran","Asia/Tehran","(GMT+03:30) Tehran"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+09:00) Osaka, Sapporo, Tokyo","Asia/Tokyo","(GMT+09:00) Osaka, Sapporo, Tokyo"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Ulaanbaatar","Asia/Ulan_Bator","(GMT+08:00) Ulaanbaatar"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+10:00) Vladivostok","Asia/Vladivostok","(GMT+10:00) Vladivostok"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+09:00) Yakutsk","Asia/Yakutsk","(GMT+09:00) Yakutsk"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+05:00) Ekaterinburg","Asia/Yekaterinburg","(GMT+05:00) Ekaterinburg"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:00) Yerevan","Asia/Yerevan","(GMT+04:00) Yerevan"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-01:00) Azores","Atlantic/Azores","(GMT-01:00) Azores"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-01:00) Cape Verde Is.","Atlantic/Cape_Verde","(GMT-01:00) Cape Verde Is."],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT) Monrovia, Reykjavik","Atlantic/Reykjavik","(GMT) Monrovia, Reykjavik"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-02:00) Mid-Atlantic","Atlantic/South_Georgia","(GMT-02:00) Mid-Atlantic"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+09:30) Adelaide","Australia/Adelaide","(GMT+09:30) Adelaide"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+10:00) Brisbane","Australia/Brisbane","(GMT+10:00) Brisbane"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+09:30) Darwin","Australia/Darwin","(GMT+09:30) Darwin"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+10:00) Hobart","Australia/Hobart","(GMT+10:00) Hobart"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+08:00) Perth","Australia/Perth","(GMT+08:00) Perth"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+10:00) Canberra, Melbourne, Sydney","Australia/Sydney","(GMT+10:00) Canberra, Melbourne, Sydney"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-12:00) International Date Line West","Etc/GMT+12","(GMT-12:00) International Date Line West"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT) Coordinated Universal Time","Etc/UTC","(GMT) Coordinated Universal Time"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Athens, Bucharest, Istanbul","Europe/Athens","(GMT+02:00) Athens, Bucharest, Istanbul"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague","Europe/Belgrade","(GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+01:00) Amsterdam, Berlin, Bern, Rome Stockholm, Vienna","Europe/Berlin","(GMT+01:00) Amsterdam, Berlin, Bern, Rome Stockholm, Vienna"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT) Greenwich Mean Time: Dublin, Edinburgh, Lisbon, London","Europe/Dublin","(GMT) Greenwich Mean Time: Dublin, Edinburgh, Lisbon, London"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius","Europe/Helsinki","(GMT+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+02:00) Minsk","Europe/Minsk","(GMT+02:00) Minsk"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+03:00) Moscow, St. Petersburg, Volgograd","Europe/Moscow","(GMT+03:00) Moscow, St. Petersburg, Volgograd"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+01:00) Brussels, Copenhagen, Madrid, Paris","Europe/Paris","(GMT+01:00) Brussels, Copenhagen, Madrid, Paris"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+01:00) Sarajevo, Skopje, Warsaw, Zagreb","Europe/Warsaw","(GMT+01:00) Sarajevo, Skopje, Warsaw, Zagreb"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","Greenwich Mean Time","GMT","Greenwich Mean Time"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+04:00) Port Louis","Indian/Mauritius","(GMT+04:00) Port Louis"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-11:00) Midway Island, Samoa","Pacific/Apia","(GMT-11:00) Midway Island, Samoa"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+12:00) Auckland, Wellington","Pacific/Auckland","(GMT+12:00) Auckland, Wellington"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+12:00) Fiji, Marshall Is.","Pacific/Fiji","(GMT+12:00) Fiji, Marshall Is."],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+10:00) Guam, Port Moresby","Pacific/Guam","(GMT+10:00) Guam, Port Moresby"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-10:00) Hawaii","Pacific/Honolulu","(GMT-10:00) Hawaii"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT-11:00) American Samoa","Pacific/Pago_Pago","(GMT-11:00) American Samoa"],["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","(GMT+13:00) Nuku'alofa","Pacific/Tongatapu","(GMT+13:00) Nuku'alofa"]]};
+let asnLineas=null; // resultado del último procesamiento
+
+function fmtVtoASN(v){ // 'yyyy-mm-dd' o 'dd/mm/yyyy' -> 'dd/mm/yyyy 08:00'
+  let m=String(v||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m) return m[3]+'/'+m[2]+'/'+m[1]+' 08:00';
+  m=String(v||'').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(m) return m[1]+'/'+m[2]+'/'+m[3]+' 08:00';
+  return '';
+}
+function ahoraASN(){
+  const d=new Date(); const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function leerExportIntrusos(filas, origen){
+  // localiza columnas por nombre de encabezado (tolerante al orden)
+  const hdr=filas[0].map(h=>String(h||'').toLowerCase().trim());
+  const col=n=>hdr.findIndex(h=>h===n);
+  const iPos=col('posición')>=0?col('posición'):col('posicion');
+  const iSku=col('sku'), iPack=col('pack'), iBul=col('bultos'), iUxb=col('unid x bulto'),
+        iVto=col('vencimiento'), iIdent=col('identificado'), iDesc=col('descripción')>=0?col('descripción'):col('descripcion');
+  if(iPos<0||iSku<0||iBul<0) return {error:'El archivo "'+origen+'" no tiene el formato del exportable de intrusos (faltan columnas Posición/SKU/Bultos).'};
+  const regs=[];
+  for(let i=1;i<filas.length;i++){
+    const f=filas[i]; if(!f || f.every(c=>String(c==null?'':c).trim()==='')) continue;
+    const g=idx=> idx>=0 ? String(f[idx]==null?'':f[idx]).trim() : '';
+    regs.push({origen, posicion:g(iPos), sku:g(iSku), pack:g(iPack), descripcion:g(iDesc),
+      bultos:parseInt(g(iBul),10)||0, uxb:parseInt(g(iUxb),10)||0, vto:g(iVto),
+      identificado:g(iIdent).toUpperCase()!=='NO'});
+  }
+  return {regs};
+}
+function procesarASN(){
+  const archivos=$('inpAsnArchivos').files;
+  if(!archivos.length){ toast('Seleccioná al menos un exportable de intrusos','error'); return; }
+  asnLineas=null; $('btnDescargarAsn').className='btn btn-guardar oculto';
+  // mapa de respaldo desde el maestro del dispositivo (para exports viejos sin Pack)
+  const respaldo={};
+  if(maestro) maestro.skus.forEach(s=>{ if(s.sku) respaldo[s.sku]={pack:s.pack||'', uxb:s.unid_x_bulto||0}; });
+
+  let pendientes=archivos.length; const lotes=[]; const errores=[];
+  Array.from(archivos).forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{
+        const wb=XLSX.read(ev.target.result,{type:'array'});
+        const filas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1, raw:false, defval:''});
+        const res=leerExportIntrusos(filas, f.name);
+        if(res.error) errores.push(res.error); else lotes.push(...res.regs);
+      }catch(err){ errores.push('No se pudo leer "'+f.name+'": '+err); }
+      if(--pendientes===0) consolidarASN(lotes, respaldo, errores);
+    };
+    r.readAsArrayBuffer(f);
+  });
+}
+function consolidarASN(regs, respaldo, errores){
+  const adv=[...errores];
+  const sinIdent=regs.filter(r=>!r.identificado || !r.sku);
+  if(sinIdent.length) adv.push(sinIdent.length+' registro(s) sin identificar quedan FUERA de la ASN (resolver a mano): '+sinIdent.map(r=>r.posicion+' ['+(r.descripcion||'s/desc')+']').join(' · '));
+
+  // agrupar por SKU + posición + vencimiento
+  const grupos={};
+  regs.filter(r=>r.identificado && r.sku).forEach(r=>{
+    const vtoKey=fmtVtoASN(r.vto)||'';
+    const k=r.sku+'|'+r.posicion+'|'+vtoKey;
+    if(!grupos[k]) grupos[k]={sku:r.sku, posicion:r.posicion, vto:vtoKey, bultos:0,
+      pack:r.pack||(respaldo[r.sku]?respaldo[r.sku].pack:''), uxb:r.uxb||(respaldo[r.sku]?respaldo[r.sku].uxb:0), descripcion:r.descripcion};
+    grupos[k].bultos+=r.bultos;
+    if(!grupos[k].pack && r.pack) grupos[k].pack=r.pack;
+    if(!grupos[k].uxb && r.uxb) grupos[k].uxb=r.uxb;
+  });
+  let lineas=Object.values(grupos);
+
+  const sinUxb=lineas.filter(l=>!l.uxb);
+  if(sinUxb.length){ adv.push(sinUxb.length+' línea(s) SIN UxB quedan FUERA (Infor no las procesa): '+sinUxb.map(l=>l.sku+' @ '+l.posicion).join(' · ')); }
+  const sinPack=lineas.filter(l=>l.uxb && !l.pack);
+  if(sinPack.length){ adv.push(sinPack.length+' línea(s) SIN PACKKEY quedan FUERA (completar PACK en la maestra o recargar el maestro en este dispositivo): '+sinPack.map(l=>l.sku+' @ '+l.posicion).join(' · ')); }
+  lineas=lineas.filter(l=>l.uxb && l.pack);
+
+  const vtoGen=fmtVtoASN($('inpAsnVtoGen').value);
+  const sinVto=lineas.filter(l=>!l.vto);
+  if(sinVto.length && !vtoGen){
+    $('resumenAsn').innerHTML='<div class="maestro-estado vacio">'+sinVto.length+' línea(s) no tienen vencimiento y no definiste un Vto genérico. Cargalo arriba y volvé a procesar.</div>';
+    return;
+  }
+  sinVto.forEach(l=>l.vto=vtoGen);
+  if(sinVto.length) adv.push(sinVto.length+' línea(s) sin vencimiento del contador usan el genérico '+vtoGen+'.');
+
+  lineas.sort((a,b)=> a.posicion.localeCompare(b.posicion) || a.sku.localeCompare(b.sku));
+  asnLineas=lineas;
+
+  const totBultos=lineas.reduce((a,l)=>a+l.bultos,0);
+  const totUnid=lineas.reduce((a,l)=>a+l.bultos*l.uxb,0);
+  $('resumenAsn').innerHTML=
+    '<div class="stats" style="grid-template-columns:repeat(2,1fr);">'+
+      '<div class="stat"><div class="num">'+lineas.length+'</div><div class="lbl">Líneas ASN</div></div>'+
+      '<div class="stat"><div class="num">'+new Set(lineas.map(l=>l.posicion)).size+'</div><div class="lbl">Posiciones</div></div>'+
+      '<div class="stat"><div class="num">'+totBultos+'</div><div class="lbl">Bultos</div></div>'+
+      '<div class="stat"><div class="num">'+totUnid+'</div><div class="lbl">Unidades (QTY)</div></div>'+
+    '</div>'+
+    (adv.length?('<div class="maestro-estado vacio" style="white-space:pre-wrap;">⚠ '+adv.join('\n⚠ ')+'</div>'):'<div class="maestro-estado cargado">Sin advertencias: todas las líneas están completas.</div>');
+  if(lineas.length){ $('btnDescargarAsn').className='btn btn-guardar'; toast('Procesado: '+lineas.length+' líneas listas','exito'); }
+}
+function descargarASN(){
+  const key=$('inpAsnKey').value.trim();
+  if(!key){ toast('Falta el Nº de ASN (RECEIPTKEY)','error'); $('inpAsnKey').focus(); return; }
+  if(!asnLineas || !asnLineas.length){ toast('Primero procesá los intrusos','error'); return; }
+  const usuario=$('inpAsnUsuario').value.trim();
+  const lote=$('inpAsnLote').value.trim().toUpperCase() || 'L000000';
+  const fnow=ahoraASN();
+  const T=v=>String(v==null?'':v);
+
+  // --- pestaña Data (cabecera): fila modelo con overrides ---
+  const iD=n=>ASN_TPL.data.h1.indexOf(n);
+  const dataRow=ASN_TPL.data.modelo.slice();
+  const setD=(n,v)=>{ const i=iD(n); if(i>=0) dataRow[i]=T(v); };
+  setD('RECEIPTKEY',key); setD('EXTERNRECEIPTKEY','WMS'+key);
+  setD('RECEIPTDATE',fnow); setD('ADVICEDATE',fnow);
+  setD('ADDDATE',fnow); setD('EDITDATE',fnow);
+  if(usuario){ setD('ADDWHO',usuario); setD('EDITWHO',usuario); }
+
+  // --- pestaña Detail: una fila por línea, clonando el modelo ---
+  const iT=n=>ASN_TPL.detail.h1.indexOf(n);
+  const filasDetail=asnLineas.map((l,idx)=>{
+    const fila=ASN_TPL.detail.modelo.slice();
+    const set=(n,v)=>{ const i=iT(n); if(i>=0) fila[i]=T(v); };
+    const nro=String(idx+1).padStart(5,'0');
+    set('RECEIPTKEY',key); set('SKU',l.sku); set('RECEIPTLINENUMBER',nro);
+    set('QTYEXPECTED',l.bultos*l.uxb); set('PACKKEY',l.pack);
+    set('TOID',''); set('TOLOC',l.posicion);
+    set('LOTTABLE03',lote); set('LOTTABLE05',l.vto);
+    set('SUSR4','UxB= '+l.uxb);
+    set('EXTERNLINENO','WMS'+nro); set('EXTERNRECEIPTKEY','WMS'+key);
+    set('DATERECEIVED',fnow); set('ADDDATE',fnow); set('EDITDATE',fnow);
+    if(usuario){ set('ADDWHO',usuario); set('EDITWHO',usuario); }
+    return fila;
+  });
+
+  // --- armar el libro: todo texto, 3 pestañas, xls 2003 ---
+  const aTexto=aoa=>XLSX.utils.aoa_to_sheet(aoa.map(f=>f.map(v=>T(v))));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, aTexto([ASN_TPL.data.h1, ASN_TPL.data.h2, dataRow]), 'Data');
+  XLSX.utils.book_append_sheet(wb, aTexto([ASN_TPL.detail.h1, ASN_TPL.detail.h2, ...filasDetail]), 'Detail');
+  XLSX.utils.book_append_sheet(wb, aTexto(ASN_TPL.validations), 'Validations');
+  XLSX.writeFile(wb, 'ASN_'+key+'_intrusos.xls', {bookType:'biff8'});
+  toast('ASN '+key+' descargada: '+asnLineas.length+' líneas','exito');
+}
+
 /* ================== TABS / CONFIG ================== */
 function irTab(t){
-  ['relevar','registros','maestro'].forEach(x=>{
+  ['relevar','registros','maestro','asn'].forEach(x=>{
     $('sec'+x[0].toUpperCase()+x.slice(1)).className = (x===t)?'':'oculto';
     $('tab'+x[0].toUpperCase()+x.slice(1)).className = (x===t)?'activo':'';
   });
   if(t==='registros') pintarRegistros();
+  if(t==='asn' && !$('inpAsnLote').value){
+    const d=new Date(); const p=n=>String(n).padStart(2,'0');
+    $('inpAsnLote').value='L'+p(d.getDate())+p(d.getMonth()+1)+String(d.getFullYear()).slice(2);
+  }
 }
 function guardarConfig(){
   config.ejercicio=$('inpEjercicio').value.trim();

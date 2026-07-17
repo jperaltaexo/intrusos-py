@@ -557,14 +557,14 @@ function guardar(){
       toast('Este producto requiere vencimiento (o marcá "ilegible")','error'); $('inpVto').focus(); return;
     }
   }
-  // duplicado
+  // duplicado: mismo producto + misma posición + MISMO vencimiento (distinto vto = caso FEFO válido)
   const codN=productoActual.codigo;
-  const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN);
+  const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN && String(r.vencimiento||'')===String(vto||''));
   if(dup && esNumerica && dup.contador===contador){
-    toast('Ya cargaste este producto en '+posicion+' ('+dup.bultos+' bultos). Si fue un error, corregilo desde la pestaña Registros.','error');
+    toast('Ya cargaste este producto con el mismo vencimiento en '+posicion+' ('+dup.bultos+' bultos). Si es otro vencimiento, cargalo; si fue un error, corregilo desde Registros.','error');
     return;
   }
-  if(dup && !confirm('Ya existe un registro de este código en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
+  if(dup && !confirm('Ya existe un registro de este código con el mismo vencimiento en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
 
   const unidXB = s && s.unid_x_bulto ? s.unid_x_bulto : null;
   registros.push({

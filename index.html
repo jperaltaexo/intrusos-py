@@ -623,7 +623,7 @@ function pintarRegistros(){
       '<div class="det">'+
         '<span class="tag '+(r.tipoIntruso==='VACIA'?'vacia':'cruzado')+'">'+(r.tipoIntruso==='VACIA'?'Pos. vacía':'Cruzado')+'</span> '+
         (!r.identificado?'<span class="tag noident">Sin identificar</span> ':'')+
-        (r.vencimiento?('Vto: '+r.vencimiento+' · '):(r.vtoIlegible?'Vto ilegible · ':''))+
+        (r.vencimiento?('Vto: '+fmtFechaAR(r.vencimiento)+' · '):(r.vtoIlegible?'Vto ilegible · ':''))+
         r.contador+' · '+r.ts + (r.obs?' · '+r.obs:'')+
       '</div>'+
       '<div class="acc"><button class="btn btn-sec btn-mini" onclick="borrarUno('+r.id+')">Eliminar</button></div>'+

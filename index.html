@@ -528,6 +528,9 @@ function guardar(){
   const obs=$('inpObs').value.trim();
 
   if(!contador){ toast('Falta el nombre del contador','error'); $('inpContador').focus(); return; }
+  if(contador.split(/\s+/).filter(p=>p.length>=2).length<2){
+    toast('Cargá nombre y apellido completos del contador (ej: "Juan Pérez")','error'); $('inpContador').focus(); return;
+  }
   if(!posicion){ toast('Falta la posición','error'); $('inpPosicion').focus(); return; }
   // posiciones numéricas: longitud exacta obligatoria
   const esNumerica=/^\d+$/.test(posicion);

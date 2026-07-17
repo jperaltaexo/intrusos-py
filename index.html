@@ -491,7 +491,8 @@ function procesarCodigo(codRaw){
   }
 }
 $('inpCodigo').addEventListener('change', e=>procesarCodigo(e.target.value));
-$('inpCodigo').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); procesarCodigo(e.target.value); }});
+$('inpCodigo').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); procesarCodigo(e.target.value);
+  if(productoActual){ (productoActual.encontrado ? $('inpBultos') : $('inpDescManual')).focus(); } }});
 $('inpBultos').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('inpObs').focus(); }});
 $('inpObs').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); guardar(); }});
 

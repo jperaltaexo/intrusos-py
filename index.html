@@ -221,6 +221,9 @@
     <h2>Configuración</h2>
     <label>Etiqueta del ejercicio</label>
     <input type="text" id="inpEjercicio" placeholder="Ej: Pedidos Ya — Inventario 17/08/2026" onchange="guardarConfig()">
+    <label>Longitud de posiciones numéricas</label>
+    <input type="number" id="inpLenPos" inputmode="numeric" min="0" step="1" onchange="guardarConfig()">
+    <p class="nota">Las posiciones 100% numéricas deben tener exactamente esta cantidad de dígitos (evita cargar 90600200 cuando es 090600200). Dejalo en 0 para desactivar el control. No aplica a posiciones alfanuméricas.</p>
   </div>
 </section>
 
@@ -525,6 +528,14 @@ function guardar(){
 
   if(!contador){ toast('Falta el nombre del contador','error'); $('inpContador').focus(); return; }
   if(!posicion){ toast('Falta la posición','error'); $('inpPosicion').focus(); return; }
+  // posiciones numéricas: longitud exacta obligatoria
+  const esNumerica=/^\d+$/.test(posicion);
+  const lenPos=parseInt(config.lenPos!==undefined?config.lenPos:9,10)||0;
+  if(esNumerica && lenPos>0 && posicion.length!==lenPos){
+    toast('La posición numérica debe tener '+lenPos+' dígitos y cargaste '+posicion.length+
+      (posicion.length<lenPos?' — ¿falta el 0 adelante? (ej: 0'+posicion+')':''),'error');
+    $('inpPosicion').focus(); return;
+  }
   if(!productoActual){ toast('Falta el código del producto','error'); $('inpCodigo').focus(); return; }
   if(!bultos || bultos<1){ toast('Cargá la cantidad de bultos','error'); $('inpBultos').focus(); return; }
 
@@ -548,6 +559,10 @@ function guardar(){
   // duplicado
   const codN=productoActual.codigo;
   const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN);
+  if(dup && esNumerica && dup.contador===contador){
+    toast('Ya cargaste este producto en '+posicion+' ('+dup.bultos+' bultos). Si fue un error, corregilo desde la pestaña Registros.','error');
+    return;
+  }
   if(dup && !confirm('Ya existe un registro de este código en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
 
   const unidXB = s && s.unid_x_bulto ? s.unid_x_bulto : null;
@@ -809,10 +824,19 @@ function irTab(t){
 function guardarConfig(){
   config.ejercicio=$('inpEjercicio').value.trim();
   config.contador=$('inpContador').value.trim();
+  const lp=parseInt($('inpLenPos').value,10);
+  config.lenPos=isNaN(lp)?9:lp;
   localStorage.setItem(K_CFG, JSON.stringify(config));
   $('subHeader').textContent=config.ejercicio||'Pedidos Ya — Inventario general';
 }
 $('inpContador').addEventListener('change', guardarConfig);
+$('inpPosicion').addEventListener('blur', ()=>{
+  const p=$('inpPosicion').value.trim();
+  const len=parseInt(config.lenPos!==undefined?config.lenPos:9,10)||0;
+  if(p && /^\d+$/.test(p) && len>0 && p.length!==len){
+    toast('Ojo: la posición tiene '+p.length+' dígitos y deben ser '+len+(p.length<len?' — ¿falta el 0 adelante?':''),'error');
+  }
+});
 
 function aplicarTecladoPos(){
   const alfa = !!config.posAlfa;
@@ -833,6 +857,7 @@ function toggleTecladoPos(){
   $('badgeCant').textContent=registros.length;
   if(config.ejercicio){ $('inpEjercicio').value=config.ejercicio; $('subHeader').textContent=config.ejercicio; }
   if(config.contador){ $('inpContador').value=config.contador; }
+  $('inpLenPos').value = config.lenPos!==undefined ? config.lenPos : 9;
   aplicarTecladoPos();
   pintarMaestro(); pintarRegistros();
 })();

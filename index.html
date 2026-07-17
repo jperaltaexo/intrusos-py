@@ -557,14 +557,31 @@ function guardar(){
       toast('Este producto requiere vencimiento (o marcá "ilegible")','error'); $('inpVto').focus(); return;
     }
   }
-  // duplicado: mismo producto + misma posición + MISMO vencimiento (distinto vto = caso FEFO válido)
+  // ---- restricciones por posición ----
   const codN=productoActual.codigo;
-  const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN && String(r.vencimiento||'')===String(vto||''));
-  if(dup && esNumerica && dup.contador===contador){
-    toast('Ya cargaste este producto con el mismo vencimiento en '+posicion+' ('+dup.bultos+' bultos). Si es otro vencimiento, cargalo; si fue un error, corregilo desde Registros.','error');
-    return;
+  // comparo por SKU identificado (el mismo producto puede escanearse por EAN o por DUN); si no está identificado, por código
+  const claveProd = s ? s.sku : codN;
+  const enPos = registros.filter(r=>r.posicion===posicion && r.contador===contador);
+  const claveDe = r => r.sku || r.codigo;
+
+  if(esNumerica){
+    // 1) producto DISTINTO en la misma posición numérica: bloqueado (una posición = un intruso)
+    const otro = enPos.find(r=>claveDe(r)!==claveProd);
+    if(otro){
+      toast('La posición '+posicion+' ya tiene cargado "'+(otro.descripcion||otro.codigo)+'". Una posición numérica admite un solo intruso: verificá que la posición sea la correcta.','error');
+      $('inpPosicion').focus(); return;
+    }
+    // 2) mismo producto: sólo se admite recarga si es con OTRO vencimiento (FEFO)
+    const mismoVto = enPos.find(r=>claveDe(r)===claveProd && String(r.vencimiento||'')===String(vto||''));
+    if(mismoVto){
+      toast('Ya cargaste este producto con el mismo vencimiento en '+posicion+' ('+mismoVto.bultos+' bultos). Sólo se admite recargarlo con otro vencimiento (FEFO); si fue un error, corregilo desde Registros.','error');
+      return;
+    }
+  } else {
+    // alfanuméricas: sin restricción, sólo aviso si es duplicado exacto
+    const dup=registros.find(r=>r.posicion===posicion && r.codigo===codN && String(r.vencimiento||'')===String(vto||''));
+    if(dup && !confirm('Ya existe un registro de este código con el mismo vencimiento en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
   }
-  if(dup && !confirm('Ya existe un registro de este código con el mismo vencimiento en '+posicion+' ('+dup.bultos+' bultos). ¿Guardar igual como registro aparte?')) return;
 
   const unidXB = s && s.unid_x_bulto ? s.unid_x_bulto : null;
   registros.push({

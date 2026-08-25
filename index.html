@@ -687,7 +687,13 @@ function filasExport(){
 }
 function nombreArchivo(ext){
   const d=new Date(); const p=n=>String(n).padStart(2,'0');
-  return 'Intrusos_PedidosYa_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+'.'+ext;
+  const nom=($('inpContador').value||'SinNombre').trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')            // sin tildes
+    .replace(/[^a-zA-Z0-9\s]/g,'')                              // sin símbolos
+    .split(/\s+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('');
+  const ver=(parseInt(config.nroExport,10)||0)+1;               // versión por dispositivo
+  config.nroExport=ver; localStorage.setItem(K_CFG, JSON.stringify(config));
+  return 'Peya_'+nom+'_'+p(d.getDate())+p(d.getMonth()+1)+d.getFullYear()+'_'+p(d.getHours())+p(d.getMinutes())+'_'+ver+'.'+ext;
 }
 function exportarXLSX(){
   if(!registros.length){ toast('No hay registros para exportar','error'); return; }

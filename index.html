@@ -626,7 +626,11 @@ function guardar(){
   $('inpObs').value=''; $('inpDescManual').value='';
   productoActual=null; $('fichaProducto').className='oculto'; $('bloqueNoIdent').className='oculto';
   $('bloqueVto').className='oculto';
-  $('inpCodigo').focus();
+  if(esNumerica){ // mono producto: la posición quedó cerrada, se carga la siguiente
+    $('inpPosicion').value=''; $('inpPosicion').focus();
+  } else {        // alfanumérica (ej: RECUPERO): se mantiene y se encadena el próximo escaneo
+    $('inpCodigo').focus();
+  }
 }
 function persistir(){
   localStorage.setItem(K_REG, JSON.stringify(registros));

@@ -270,6 +270,7 @@
 <div id="modalScanner">
   <div id="msgScanner">Apuntá al código de barras (EAN-13 / DUN-14 / ITF)</div>
   <div id="lector"></div>
+  <button class="btn oculto" id="btnLinterna" style="background:#f59e0b; color:#141a22; margin-top:12px;" onclick="toggleLinterna()">🔦 Prender linterna</button>
   <button class="btn btn-peligro" onclick="cerrarScanner()">Cancelar</button>
 </div>
 
@@ -497,8 +498,10 @@ $('inpBultos').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDe
 $('inpObs').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); guardar(); }});
 
 /* ================== SCANNER ================== */
+let linternaOn=false;
 function abrirScanner(){
   $('modalScanner').className='abierto';
+  linternaOn=false; $('btnLinterna').className='btn oculto';
   const conf={ fps:10, qrbox:{width:280,height:140},
     formatsToSupport:[ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
       Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A ] };
@@ -507,11 +510,32 @@ function abrirScanner(){
     txt=>{ if(navigator.vibrate) navigator.vibrate(120);
       $('inpCodigo').value=txt; cerrarScanner(); procesarCodigo(txt); $('inpBultos').focus(); },
     ()=>{} )
+  .then(()=>{
+    // mostrar el botón de linterna sólo si el dispositivo la soporta
+    try{
+      const caps=scanner.getRunningTrackCapabilities();
+      if(caps && caps.torch) $('btnLinterna').className='btn';
+    }catch(e){}
+  })
   .catch(err=>{ $('msgScanner').textContent='No se pudo abrir la cámara: '+err+' — tipeá el código manualmente.'; });
 }
+function toggleLinterna(){
+  if(!scanner) return;
+  const nuevo=!linternaOn;
+  scanner.applyVideoConstraints({advanced:[{torch:nuevo}]})
+    .then(()=>{ linternaOn=nuevo;
+      $('btnLinterna').textContent=(linternaOn?'🔦 Apagar linterna':'🔦 Prender linterna'); })
+    .catch(()=>toast('Este dispositivo no permite controlar la linterna','error'));
+}
 function cerrarScanner(){
-  if(scanner){ scanner.stop().then(()=>{scanner.clear(); scanner=null;}).catch(()=>{scanner=null;}); }
+  if(scanner){
+    const s=scanner; scanner=null;
+    const apagar = linternaOn ? s.applyVideoConstraints({advanced:[{torch:false}]}).catch(()=>{}) : Promise.resolve();
+    apagar.finally(()=>{ s.stop().then(()=>s.clear()).catch(()=>{}); });
+    linternaOn=false;
+  }
   $('modalScanner').className='';
+  $('btnLinterna').className='btn oculto'; $('btnLinterna').textContent='🔦 Prender linterna';
   $('msgScanner').textContent='Apuntá al código de barras (EAN-13 / DUN-14 / ITF)';
 }
 
